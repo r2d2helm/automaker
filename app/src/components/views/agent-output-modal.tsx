@@ -301,14 +301,14 @@ export function AgentOutputModal({
         </DialogHeader>
 
         {viewMode === "changes" ? (
-          <div className="flex-1 min-h-[400px] max-h-[60vh] overflow-hidden">
+          <div className="flex-1 min-h-[400px] max-h-[60vh] overflow-y-auto scrollbar-visible">
             {projectPath ? (
               <GitDiffPanel
                 projectPath={projectPath}
                 featureId={featureId}
                 compact={false}
                 useWorktrees={useWorktrees}
-                className="border-0 rounded-lg h-full"
+                className="border-0 rounded-lg"
               />
             ) : (
               <div className="flex items-center justify-center h-full text-muted-foreground">

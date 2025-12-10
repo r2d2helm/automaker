@@ -1,5 +1,6 @@
 "use client";
 
+import { memo } from "react";
 import { useDroppable } from "@dnd-kit/core";
 import { cn } from "@/lib/utils";
 import type { ReactNode } from "react";
@@ -13,7 +14,7 @@ interface KanbanColumnProps {
   headerAction?: ReactNode;
 }
 
-export function KanbanColumn({
+export const KanbanColumn = memo(function KanbanColumn({
   id,
   title,
   color,
@@ -48,4 +49,4 @@ export function KanbanColumn({
       </div>
     </div>
   );
-}
+});

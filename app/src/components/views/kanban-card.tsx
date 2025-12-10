@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, memo } from "react";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { cn } from "@/lib/utils";
@@ -92,7 +92,7 @@ interface KanbanCardProps {
   summary?: string;
 }
 
-export function KanbanCard({
+export const KanbanCard = memo(function KanbanCard({
   feature,
   onEdit,
   onDelete,
@@ -227,7 +227,7 @@ export function KanbanCard({
       {/* Shortcut key badge for in-progress cards */}
       {shortcutKey && (
         <div
-          className="absolute top-2 left-2 px-1.5 py-0.5 text-[10px] font-mono rounded bg-muted border border-border text-muted-foreground z-10"
+          className="absolute top-2 left-2 px-1.5 py-0.5 text-[10px] font-mono rounded bg-brand-500/10 border border-brand-500/30 text-brand-400/70 z-10"
           data-testid={`shortcut-key-${feature.id}`}
         >
           {shortcutKey}
@@ -869,4 +869,4 @@ export function KanbanCard({
       </Dialog>
     </Card>
   );
-}
+});

@@ -248,6 +248,8 @@ export interface AppActions {
 
   // Theme actions
   setTheme: (theme: ThemeMode) => void;
+  setProjectTheme: (projectId: string, theme: ThemeMode | null) => void; // Set per-project theme (null to clear)
+  getEffectiveTheme: () => ThemeMode; // Get the effective theme (project or global)
 
   // Feature actions
   setFeatures: (features: Feature[]) => void;
@@ -634,6 +636,37 @@ export const useAppStore = create<AppState & AppActions>()(
 
       // Theme actions
       setTheme: (theme) => set({ theme }),
+
+      setProjectTheme: (projectId, theme) => {
+        // Update the project's theme property
+        const projects = get().projects.map((p) =>
+          p.id === projectId
+            ? { ...p, theme: theme === null ? undefined : theme }
+            : p
+        );
+        set({ projects });
+
+        // Also update currentProject if it's the same project
+        const currentProject = get().currentProject;
+        if (currentProject?.id === projectId) {
+          set({
+            currentProject: {
+              ...currentProject,
+              theme: theme === null ? undefined : theme,
+            },
+          });
+        }
+      },
+
+      getEffectiveTheme: () => {
+        const currentProject = get().currentProject;
+        // If current project has a theme set, use it
+        if (currentProject?.theme) {
+          return currentProject.theme as ThemeMode;
+        }
+        // Otherwise fall back to global theme
+        return get().theme;
+      },
 
       // Feature actions
       setFeatures: (features) => set({ features }),

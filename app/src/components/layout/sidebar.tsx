@@ -25,6 +25,20 @@ import {
   Undo2,
   UserCircle,
   MoreVertical,
+  Palette,
+  Moon,
+  Sun,
+  Terminal,
+  Ghost,
+  Snowflake,
+  Flame,
+  Sparkles as TokyoNightIcon,
+  Eclipse,
+  Trees,
+  Cat,
+  Atom,
+  Radio,
+  Monitor,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -32,6 +46,12 @@ import {
   DropdownMenuTrigger,
   DropdownMenuItem,
   DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubTrigger,
+  DropdownMenuSubContent,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuLabel,
 } from "@/components/ui/dropdown-menu";
 import {
   Dialog,
@@ -139,7 +159,7 @@ function SortableProjectItem({
       {/* Hotkey indicator */}
       {index < 9 && (
         <span
-          className="flex items-center justify-center w-5 h-5 text-[10px] font-mono rounded bg-sidebar-accent/10 border border-sidebar-border text-muted-foreground"
+          className="flex items-center justify-center w-5 h-5 text-[10px] font-mono rounded bg-brand-500/10 border border-brand-500/30 text-brand-400/70"
           data-testid={`project-hotkey-${index + 1}`}
         >
           {index + 1}
@@ -161,6 +181,23 @@ function SortableProjectItem({
   );
 }
 
+// Theme options for project theme selector
+const PROJECT_THEME_OPTIONS = [
+  { value: "", label: "Use Global", icon: Monitor },
+  { value: "dark", label: "Dark", icon: Moon },
+  { value: "light", label: "Light", icon: Sun },
+  { value: "retro", label: "Retro", icon: Terminal },
+  { value: "dracula", label: "Dracula", icon: Ghost },
+  { value: "nord", label: "Nord", icon: Snowflake },
+  { value: "monokai", label: "Monokai", icon: Flame },
+  { value: "tokyonight", label: "Tokyo Night", icon: TokyoNightIcon },
+  { value: "solarized", label: "Solarized", icon: Eclipse },
+  { value: "gruvbox", label: "Gruvbox", icon: Trees },
+  { value: "catppuccin", label: "Catppuccin", icon: Cat },
+  { value: "onedark", label: "One Dark", icon: Atom },
+  { value: "synthwave", label: "Synthwave", icon: Radio },
+] as const;
+
 export function Sidebar() {
   const {
     projects,
@@ -180,6 +217,8 @@ export function Sidebar() {
     cyclePrevProject,
     cycleNextProject,
     clearProjectHistory,
+    setProjectTheme,
+    theme: globalTheme,
   } = useAppStore();
 
   // State for project picker dropdown
@@ -640,7 +679,7 @@ export function Sidebar() {
         >
           {sidebarOpen ? "Collapse sidebar" : "Expand sidebar"}{" "}
           <span
-            className="ml-1 px-1 py-0.5 bg-sidebar-accent/10 rounded text-[10px] font-mono"
+            className="ml-1 px-1 py-0.5 bg-brand-500/10 border border-brand-500/30 rounded text-[10px] font-mono text-brand-400/70"
             data-testid="sidebar-toggle-shortcut"
           >
             {UI_SHORTCUTS.toggleSidebar}
@@ -700,7 +739,7 @@ export function Sidebar() {
               data-testid="open-project-button"
             >
               <FolderOpen className="w-4 h-4 shrink-0" />
-              <span className="hidden lg:flex items-center justify-center w-5 h-5 text-[10px] font-mono rounded bg-white/5 border border-white/10 text-zinc-500 ml-2">
+              <span className="hidden lg:flex items-center justify-center w-5 h-5 text-[10px] font-mono rounded bg-brand-500/10 border border-brand-500/30 text-brand-400/70 ml-2">
                 {ACTION_SHORTCUTS.openProject}
               </span>
             </button>
@@ -740,7 +779,7 @@ export function Sidebar() {
                   </div>
                   <div className="flex items-center gap-1">
                     <span
-                      className="hidden lg:flex items-center justify-center w-5 h-5 text-[10px] font-mono rounded bg-sidebar-accent/10 border border-sidebar-border text-muted-foreground"
+                      className="hidden lg:flex items-center justify-center w-5 h-5 text-[10px] font-mono rounded bg-brand-500/10 border border-brand-500/30 text-brand-400/70"
                       data-testid="project-picker-shortcut"
                     >
                       {ACTION_SHORTCUTS.projectPicker}
@@ -780,38 +819,92 @@ export function Sidebar() {
               </DropdownMenuContent>
             </DropdownMenu>
 
-            {/* Project History Menu - only show when there's history */}
-            {projectHistory.length > 1 && (
+            {/* Project Options Menu - theme and history */}
+            {currentProject && (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <button
                     className="hidden lg:flex items-center justify-center w-8 h-[42px] rounded-lg text-muted-foreground hover:text-foreground hover:bg-sidebar-accent/50 border border-sidebar-border transition-all titlebar-no-drag"
-                    title="Project history"
-                    data-testid="project-history-menu"
+                    title="Project options"
+                    data-testid="project-options-menu"
                   >
                     <MoreVertical className="w-4 h-4" />
                   </button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-48">
-                  <DropdownMenuItem onClick={cyclePrevProject} data-testid="cycle-prev-project">
-                    <Undo2 className="w-4 h-4 mr-2" />
-                    <span className="flex-1">Previous</span>
-                    <span className="text-[10px] font-mono text-muted-foreground ml-2">
-                      {ACTION_SHORTCUTS.cyclePrevProject}
-                    </span>
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={cycleNextProject} data-testid="cycle-next-project">
-                    <Redo2 className="w-4 h-4 mr-2" />
-                    <span className="flex-1">Next</span>
-                    <span className="text-[10px] font-mono text-muted-foreground ml-2">
-                      {ACTION_SHORTCUTS.cycleNextProject}
-                    </span>
-                  </DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={clearProjectHistory} data-testid="clear-project-history">
-                    <RotateCcw className="w-4 h-4 mr-2" />
-                    <span>Clear history</span>
-                  </DropdownMenuItem>
+                <DropdownMenuContent align="end" className="w-56">
+                  {/* Project Theme Submenu */}
+                  <DropdownMenuSub>
+                    <DropdownMenuSubTrigger data-testid="project-theme-trigger">
+                      <Palette className="w-4 h-4 mr-2" />
+                      <span className="flex-1">Project Theme</span>
+                      {currentProject.theme && (
+                        <span className="text-[10px] text-muted-foreground ml-2 capitalize">
+                          {currentProject.theme}
+                        </span>
+                      )}
+                    </DropdownMenuSubTrigger>
+                    <DropdownMenuSubContent className="w-48" data-testid="project-theme-menu">
+                      <DropdownMenuLabel className="text-xs text-muted-foreground">
+                        Select theme for this project
+                      </DropdownMenuLabel>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuRadioGroup
+                        value={currentProject.theme || ""}
+                        onValueChange={(value) => {
+                          if (currentProject) {
+                            setProjectTheme(currentProject.id, value === "" ? null : value as any);
+                          }
+                        }}
+                      >
+                        {PROJECT_THEME_OPTIONS.map((option) => {
+                          const Icon = option.icon;
+                          return (
+                            <DropdownMenuRadioItem
+                              key={option.value}
+                              value={option.value}
+                              data-testid={`project-theme-${option.value || 'global'}`}
+                            >
+                              <Icon className="w-4 h-4 mr-2" />
+                              <span>{option.label}</span>
+                              {option.value === "" && (
+                                <span className="text-[10px] text-muted-foreground ml-1 capitalize">
+                                  ({globalTheme})
+                                </span>
+                              )}
+                            </DropdownMenuRadioItem>
+                          );
+                        })}
+                      </DropdownMenuRadioGroup>
+                    </DropdownMenuSubContent>
+                  </DropdownMenuSub>
+
+                  {/* Project History Section - only show when there's history */}
+                  {projectHistory.length > 1 && (
+                    <>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuLabel className="text-xs text-muted-foreground">
+                        Project History
+                      </DropdownMenuLabel>
+                      <DropdownMenuItem onClick={cyclePrevProject} data-testid="cycle-prev-project">
+                        <Undo2 className="w-4 h-4 mr-2" />
+                        <span className="flex-1">Previous</span>
+                        <span className="text-[10px] font-mono text-muted-foreground ml-2">
+                          {ACTION_SHORTCUTS.cyclePrevProject}
+                        </span>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={cycleNextProject} data-testid="cycle-next-project">
+                        <Redo2 className="w-4 h-4 mr-2" />
+                        <span className="flex-1">Next</span>
+                        <span className="text-[10px] font-mono text-muted-foreground ml-2">
+                          {ACTION_SHORTCUTS.cycleNextProject}
+                        </span>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={clearProjectHistory} data-testid="clear-project-history">
+                        <RotateCcw className="w-4 h-4 mr-2" />
+                        <span>Clear history</span>
+                      </DropdownMenuItem>
+                    </>
+                  )}
                 </DropdownMenuContent>
               </DropdownMenu>
             )}
@@ -887,9 +980,9 @@ export function Sidebar() {
                         {item.shortcut && sidebarOpen && (
                           <span
                             className={cn(
-                              "hidden lg:flex items-center justify-center w-5 h-5 text-[10px] font-mono rounded bg-white/5 border border-white/10 text-zinc-500",
+                              "hidden lg:flex items-center justify-center w-5 h-5 text-[10px] font-mono rounded bg-brand-500/10 border border-brand-500/30 text-brand-400/70",
                               isActive &&
-                                "bg-brand-500/10 border-brand-500/20 text-brand-400"
+                                "bg-brand-500/20 border-brand-500/50 text-brand-400"
                             )}
                             data-testid={`shortcut-${item.id}`}
                           >
@@ -953,9 +1046,9 @@ export function Sidebar() {
             {sidebarOpen && (
               <span
                 className={cn(
-                  "hidden lg:flex items-center justify-center w-5 h-5 text-[10px] font-mono rounded bg-white/5 border border-white/10 text-zinc-500",
+                  "hidden lg:flex items-center justify-center w-5 h-5 text-[10px] font-mono rounded bg-brand-500/10 border border-brand-500/30 text-brand-400/70",
                   isActiveRoute("settings") &&
-                    "bg-brand-500/10 border-brand-500/20 text-brand-400"
+                    "bg-brand-500/20 border-brand-500/50 text-brand-400"
                 )}
                 data-testid="shortcut-settings"
               >

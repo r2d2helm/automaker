@@ -548,7 +548,7 @@ export function ProfilesView() {
             <Button onClick={() => setShowAddDialog(true)} data-testid="add-profile-button" className="relative">
               <Plus className="w-4 h-4 mr-2" />
               New Profile
-              <span className="hidden lg:flex items-center justify-center ml-2 px-2 py-0.5 text-[10px] font-mono rounded bg-white/5 border border-white/10 text-zinc-500">
+              <span className="hidden lg:flex items-center justify-center ml-2 px-2 py-0.5 text-[10px] font-mono rounded bg-primary-foreground/20 border border-primary-foreground/30 text-primary-foreground">
                 {ACTION_SHORTCUTS.addProfile}
               </span>
             </Button>

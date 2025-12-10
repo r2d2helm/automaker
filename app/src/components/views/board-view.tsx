@@ -268,6 +268,8 @@ export function BoardView() {
   // Track previous project to detect switches
   const prevProjectPathRef = useRef<string | null>(null);
   const isSwitchingProjectRef = useRef<boolean>(false);
+  // Track if this is the initial load (to avoid showing loading spinner on subsequent reloads)
+  const isInitialLoadRef = useRef<boolean>(true);
 
   // Auto mode hook
   const autoMode = useAutoMode();
@@ -367,11 +369,13 @@ export function BoardView() {
     const previousPath = prevProjectPathRef.current;
 
     // If project switched, clear features first to prevent cross-contamination
+    // Also treat this as an initial load for the new project
     if (previousPath !== null && currentPath !== previousPath) {
       console.log(
         `[BoardView] Project switch detected: ${previousPath} -> ${currentPath}, clearing features`
       );
       isSwitchingProjectRef.current = true;
+      isInitialLoadRef.current = true;
       setFeatures([]);
       setPersistedCategories([]); // Also clear categories
     }
@@ -379,7 +383,11 @@ export function BoardView() {
     // Update the ref to track current project
     prevProjectPathRef.current = currentPath;
 
-    setIsLoading(true);
+    // Only show loading spinner on initial load to prevent board flash during reloads
+    if (isInitialLoadRef.current) {
+      setIsLoading(true);
+    }
+
     try {
       const api = getElectronAPI();
       const result = await api.readFile(
@@ -403,6 +411,7 @@ export function BoardView() {
       console.error("Failed to load features:", error);
     } finally {
       setIsLoading(false);
+      isInitialLoadRef.current = false;
       isSwitchingProjectRef.current = false;
     }
   }, [currentProject, setFeatures]);
@@ -1270,17 +1279,35 @@ export function BoardView() {
     }
   };
 
-  const getColumnFeatures = (columnId: ColumnId) => {
-    return features.filter((f) => {
+  // Memoize column features to prevent unnecessary re-renders
+  const columnFeaturesMap = useMemo(() => {
+    const map: Record<ColumnId, Feature[]> = {
+      backlog: [],
+      in_progress: [],
+      waiting_approval: [],
+      verified: [],
+    };
+
+    features.forEach((f) => {
       // If feature has a running agent, always show it in "in_progress"
       const isRunning = runningAutoTasks.includes(f.id);
       if (isRunning) {
-        return columnId === "in_progress";
+        map.in_progress.push(f);
+      } else {
+        // Otherwise, use the feature's status
+        map[f.status].push(f);
       }
-      // Otherwise, use the feature's status
-      return f.status === columnId;
     });
-  };
+
+    return map;
+  }, [features, runningAutoTasks]);
+
+  const getColumnFeatures = useCallback(
+    (columnId: ColumnId) => {
+      return columnFeaturesMap[columnId];
+    },
+    [columnFeaturesMap]
+  );
 
   const handleViewOutput = (feature: Feature) => {
     setOutputFeature(feature);
@@ -1537,7 +1564,7 @@ export function BoardView() {
             <Plus className="w-4 h-4 mr-2" />
             Add Feature
             <span
-              className="ml-2 px-1.5 py-0.5 text-[10px] font-mono rounded bg-accent border border-border-glass"
+              className="ml-3 px-2 py-0.5 text-[10px] font-mono rounded bg-primary-foreground/20 border border-primary-foreground/30 text-primary-foreground inline-flex items-center justify-center"
               data-testid="shortcut-add-feature"
             >
               {ACTION_SHORTCUTS.addFeature}
@@ -2037,10 +2064,11 @@ export function BoardView() {
             >
               Add Feature
               <span
-                className="ml-2 px-1.5 py-0.5 text-[10px] font-mono rounded bg-primary-foreground/10 border border-primary-foreground/20"
+                className="ml-3 px-2 py-0.5 text-[10px] font-mono rounded bg-primary-foreground/10 border border-primary-foreground/20 inline-flex items-center gap-1.5"
                 data-testid="shortcut-confirm-add-feature"
               >
-                ⌘↵
+                <span className="leading-none flex items-center justify-center">⌘</span>
+                <span className="leading-none flex items-center justify-center">↵</span>
               </span>
             </Button>
           </DialogFooter>

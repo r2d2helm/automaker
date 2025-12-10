@@ -5,10 +5,10 @@
     "description": "In the output logs of the proc agent output in the file diffs Can you add a scroll bar so it actually scroll to see all these new styles right now it seems like I can't scroll",
     "steps": [],
     "status": "waiting_approval",
-    "startedAt": "2025-12-10T17:36:31.716Z",
+    "startedAt": "2025-12-10T17:42:09.158Z",
     "imagePaths": [],
     "skipTests": true,
-    "summary": "Fixed file diffs scrolling in agent output modal. Restructured git-diff-panel.tsx with flex layout - summary bar stays fixed at top while file list scrolls with visible scrollbar. Previously added scrollbar-visible CSS utility class in globals.css.",
+    "summary": "Fixed scrolling for file diffs in agent output modal. Changed approach: parent container (agent-output-modal.tsx) now handles scrolling with overflow-y-auto, while GitDiffPanel uses natural height without flex-based scrolling. Modified: agent-output-modal.tsx (line 304), git-diff-panel.tsx (lines 461, 500, 525, 614).",
     "model": "opus",
     "thinkingLevel": "none"
   },
@@ -30,11 +30,129 @@
     "category": "Uncategorized",
     "description": "Can you add a disclaimer .md file to this project saying that this uses a bunch of AI related tooling which could have access to your operating system and change and delete files and so use at your own risk. We tried to check it for security of vulnerability to make sure it's good. But you assume the risk and you should be reviewing the code yourself before you try to run it. And also sandboxing this so it doesn't have access to your whole operating system like using Docker to sandbox before you run it or use a virtual machine to sandbox it. and that we do not recommend running locally on your computer due to the risk of it having access to everything on your computer.\n\nUpdate or read me with a short paragraph overview/description at the top followed by a disclaimer section in red that points to the disclaimer file with the same disclaimer information.\n\nThen a section that lists out all the features of cool emojis.",
     "steps": [],
-    "status": "waiting_approval",
+    "status": "verified",
     "startedAt": "2025-12-10T17:35:40.700Z",
     "imagePaths": [],
     "skipTests": true,
     "summary": "Created DISCLAIMER.md with comprehensive security warnings about AI tooling risks and sandboxing recommendations. Updated README.md with project overview, red caution disclaimer section linking to DISCLAIMER.md, and features list with emojis covering all major functionality (Kanban, AI agents, multi-model support, etc.).",
+    "model": "opus",
+    "thinkingLevel": "none"
+  },
+  {
+    "id": "feature-1765388388144-oa1dewze9",
+    "category": "Uncategorized",
+    "description": "Please fix the styling of the hotkeys to be more using the theme colors. Notice that they're kind of gray. I would rather than have some type of like light green if they're not active and then the brighter green if they are active and also the add feature but in the top right it's not very legible. So fix the accessibility of the hotkey but also keep it within the theme. You might just have to change the text inside of it to be bright green.",
+    "steps": [],
+    "status": "verified",
+    "startedAt": "2025-12-10T17:40:02.745Z",
+    "imagePaths": [
+      {
+        "id": "img-1765388352835-dgx4ishp0",
+        "path": "/Users/webdevcody/Library/Application Support/automaker/images/1765388352832-6jnbgw8kg_Screenshot_2025-12-10_at_12.39.10_PM.png",
+        "filename": "Screenshot 2025-12-10 at 12.39.10 PM.png",
+        "mimeType": "image/png"
+      },
+      {
+        "id": "img-1765388356955-a0gdovp5b",
+        "path": "/Users/webdevcody/Library/Application Support/automaker/images/1765388356954-d59a65nf9_Screenshot_2025-12-10_at_12.39.15_PM.png",
+        "filename": "Screenshot 2025-12-10 at 12.39.15 PM.png",
+        "mimeType": "image/png"
+      }
+    ],
+    "skipTests": true,
+    "model": "opus",
+    "thinkingLevel": "none"
+  },
+  {
+    "id": "feature-1765388402095-x66aduwg3",
+    "category": "Uncategorized",
+    "description": "Can you please add some spacing and fix the styling of the hotkey with the command enter and make it so they're both vertically aligned for those icons?",
+    "steps": [],
+    "status": "waiting_approval",
+    "startedAt": "2025-12-10T17:44:08.667Z",
+    "imagePaths": [
+      {
+        "id": "img-1765388390408-eefybe95t",
+        "path": "/Users/webdevcody/Library/Application Support/automaker/images/1765388390408-nn320yoyc_Screenshot_2025-12-10_at_12.39.47_PM.png",
+        "filename": "Screenshot 2025-12-10 at 12.39.47 PM.png",
+        "mimeType": "image/png"
+      }
+    ],
+    "skipTests": true,
+    "model": "opus",
+    "thinkingLevel": "none"
+  },
+  {
+    "id": "feature-1765388662444-as3hqn7be",
+    "category": "Uncategorized",
+    "description": "Fix the styling on all the buttons when I hover over them with my mouse they never change to a click mouse cursor. In order they seem to show any type of like hover state changes, if they do, at least for the certain game I'm using, it's not very obvious that you're hovering over the button.",
+    "steps": [],
+    "status": "waiting_approval",
+    "startedAt": "2025-12-10T17:45:59.666Z",
+    "imagePaths": [],
+    "skipTests": true,
+    "summary": "Fixed hover cursor styling on all interactive elements. Modified: button.tsx (added cursor-pointer to base styles), dropdown-menu.tsx (added cursor-pointer to all menu items), checkbox.tsx (added cursor-pointer), tabs.tsx (added cursor-pointer to triggers), dialog.tsx (added cursor-pointer to close button), slider.tsx (added cursor-grab to thumb, cursor-pointer to track), globals.css (added global CSS rules for clickable elements to ensure consistent cursor behavior).",
+    "model": "opus",
+    "thinkingLevel": "none"
+  },
+  {
+    "id": "feature-1765388693856-yx1dk1acj",
+    "category": "Kanban",
+    "description": "The tabs in the add new feature modal for the prompt model and testing tabs. They don't seem to look like tabs when I'm on a certain theme. Can you verify that those are hooked into the theme? And make sure that the active one is colored differently than the unactive ones. Keep the primary colors when doing this.",
+    "steps": [],
+    "status": "waiting_approval",
+    "startedAt": "2025-12-10T17:46:00.019Z",
+    "imagePaths": [],
+    "skipTests": true,
+    "summary": "Fixed tabs component theme integration. Modified: tabs.tsx. Changes: (1) Added visible border to TabsList container using theme's border color, (2) Changed inactive tab text to foreground/70 for better contrast, (3) Enhanced active tab with shadow-md and semi-transparent primary border, (4) Improved hover state with full accent background. Active tabs now properly use bg-primary/text-primary-foreground which adapts to each theme.",
+    "model": "opus",
+    "thinkingLevel": "none"
+  },
+  {
+    "id": "feature-1765388754462-bek0flvkj",
+    "category": "Uncategorized",
+    "description": "There's a strange issue when I when when these agents are like doing things it seems like it completely refreshes the whole Kanban board and there's like a black flash. Can you verify that the data loading does not cause the entire component to refresh? Maybe there's an issue with the react effect or how the component is rendered maybe we need some used memos or something but it shouldn't refresh the whole page it should just like update the individual cards when they change.",
+    "steps": [],
+    "status": "waiting_approval",
+    "startedAt": "2025-12-10T17:47:20.170Z",
+    "imagePaths": [],
+    "skipTests": true,
+    "summary": "Fixed Kanban board flash/refresh issue. Changes: (1) board-view.tsx - Added isInitialLoadRef to only show loading spinner on initial load, not on feature reloads; memoized column features with useMemo to prevent recalculation on every render. (2) kanban-card.tsx - Wrapped with React.memo to prevent unnecessary re-renders. (3) kanban-column.tsx - Wrapped with React.memo for performance. The flash was caused by loadFeatures setting isLoading=true on every reload, which caused the entire board to unmount and show a loading spinner.",
+    "model": "opus",
+    "thinkingLevel": "none"
+  },
+  {
+    "id": "feature-1765388793845-yhluf0sry",
+    "category": "Uncategorized",
+    "description": "Add in the ability so that every project can have its own selected theme. This will allow me to have different projects have different themes so I can easily differentiate when I have one project selected or not.",
+    "steps": [],
+    "status": "waiting_approval",
+    "startedAt": "2025-12-10T17:54:11.363Z",
+    "imagePaths": [],
+    "skipTests": true,
+    "summary": "Added per-project theme support. Modified: electron.ts (added theme property to Project interface), app-store.ts (added setProjectTheme and getEffectiveTheme actions), page.tsx (uses effectiveTheme for theme switching), sidebar.tsx (added project theme selector dropdown with all 13 themes + \"Use Global\" option). Users can now set unique themes for each project via the project options menu in the sidebar.",
+    "model": "opus",
+    "thinkingLevel": "none"
+  },
+  {
+    "id": "feature-1765389333728-y74hmz2yp",
+    "category": "Agent Runner",
+    "description": "On the Agent Runner, I took a screenshot and dropped it into the text area and after a certain amount of time, it's like the image preview just completely went away. Can you debug and fix this on the Agent Runner?",
+    "steps": [],
+    "status": "backlog",
+    "imagePaths": [],
+    "skipTests": true,
+    "model": "opus",
+    "thinkingLevel": "none"
+  },
+  {
+    "id": "feature-1765389352488-j9bez5ztx",
+    "category": "Kanban",
+    "description": "It seems like the category typehead is no longer working. Can you double check that code didn't break? It should have kept track of categories inside of the categories.json file inside the .automaker folder when adding new features modal",
+    "steps": [],
+    "status": "backlog",
+    "imagePaths": [],
+    "skipTests": true,
     "model": "opus",
     "thinkingLevel": "none"
   }

@@ -458,7 +458,7 @@ export function GitDiffPanel({
   return (
     <div
       className={cn(
-        "rounded-xl border border-border bg-card backdrop-blur-sm overflow-hidden flex flex-col h-full",
+        "rounded-xl border border-border bg-card backdrop-blur-sm overflow-hidden",
         className
       )}
       data-testid="git-diff-panel"
@@ -497,7 +497,7 @@ export function GitDiffPanel({
 
       {/* Content */}
       {isExpanded && (
-        <div className="border-t border-border flex-1 min-h-0 overflow-hidden flex flex-col">
+        <div className="border-t border-border">
           {isLoading ? (
             <div className="flex items-center justify-center gap-2 py-8 text-muted-foreground">
               <Loader2 className="w-5 h-5 animate-spin" />
@@ -522,9 +522,9 @@ export function GitDiffPanel({
               <span className="text-sm">No changes detected</span>
             </div>
           ) : (
-            <div className="flex flex-col flex-1 min-h-0">
-              {/* Summary bar - fixed at top */}
-              <div className="p-4 pb-2 flex-shrink-0 border-b border-border-glass">
+            <div>
+              {/* Summary bar */}
+              <div className="p-4 pb-2 border-b border-border-glass">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-4 flex-wrap">
                     {(() => {
@@ -610,8 +610,8 @@ export function GitDiffPanel({
                 </div>
               </div>
 
-              {/* File diffs - scrollable */}
-              <div className="flex-1 min-h-0 overflow-y-auto scrollbar-visible p-4 space-y-3">
+              {/* File diffs */}
+              <div className="p-4 space-y-3">
                 {parsedDiffs.map((fileDiff) => (
                   <FileDiffSection
                     key={fileDiff.filePath}
