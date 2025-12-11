@@ -345,3 +345,4 @@ process.on('SIGINT', () => {
 console.error('[McpServerStdio] Starting MCP server for automaker-tools');
 console.error(`[McpServerStdio] Project path: ${projectPath}`);
 console.error(`[McpServerStdio] IPC channel: ${ipcChannel}`);
+
