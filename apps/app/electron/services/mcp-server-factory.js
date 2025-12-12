@@ -53,6 +53,15 @@ class McpServerFactory {
                 finalStatus = "waiting_approval";
               }
 
+              // IMPORTANT: Prevent agent from moving an in_progress feature back to backlog
+              // When a feature is being worked on, the agent should only be able to mark it as verified
+              // (which may be converted to waiting_approval for skipTests features)
+              // This prevents the agent from incorrectly putting completed work back in the backlog
+              if (feature && feature.status === "in_progress" && (args.status === "backlog" || args.status === "todo")) {
+                console.log(`[McpServerFactory] Feature ${args.featureId} is in_progress - preventing move to ${args.status}, converting to waiting_approval instead`);
+                finalStatus = "waiting_approval";
+              }
+
               // Call the provided callback to update feature status
               await updateFeatureStatusCallback(
                 args.featureId, 

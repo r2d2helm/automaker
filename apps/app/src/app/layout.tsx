@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 import { GeistSans } from "geist/font/sans";
 import { GeistMono } from "geist/font/mono";
 import { Toaster } from "sonner";
-import { CoursePromoBadge } from "@/components/ui/course-promo-badge";
 import "./globals.css";
 export const metadata: Metadata = {
   title: "Automaker - Autonomous AI Development Studio",
@@ -21,7 +20,6 @@ export default function RootLayout({
       >
         {children}
         <Toaster richColors position="bottom-right" />
-        <CoursePromoBadge />
       </body>
     </html>
   );

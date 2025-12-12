@@ -876,17 +876,21 @@ interface SetupAPI {
   getClaudeStatus: () => Promise<{
     success: boolean;
     status?: string;
+    installed?: boolean;
     method?: string;
     version?: string;
     path?: string;
     auth?: {
       authenticated: boolean;
       method: string;
-      hasCredentialsFile: boolean;
-      hasToken: boolean;
+      hasCredentialsFile?: boolean;
+      hasToken?: boolean;
       hasStoredOAuthToken?: boolean;
       hasStoredApiKey?: boolean;
       hasEnvApiKey?: boolean;
+      hasEnvOAuthToken?: boolean;
+      hasCliAuth?: boolean;
+      hasRecentActivity?: boolean;
     };
     error?: string;
   }>;
@@ -966,11 +970,14 @@ function createMockSetupAPI(): SetupAPI {
       return {
         success: true,
         status: "not_installed",
+        installed: false,
         auth: {
           authenticated: false,
           method: "none",
           hasCredentialsFile: false,
           hasToken: false,
+          hasCliAuth: false,
+          hasRecentActivity: false,
         },
       };
     },

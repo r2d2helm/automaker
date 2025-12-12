@@ -3,6 +3,7 @@
 import { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import { cn } from "@/lib/utils";
 import { useAppStore, formatShortcut } from "@/store/app-store";
+import { CoursePromoBadge } from "@/components/ui/course-promo-badge";
 import {
   FolderOpen,
   Plus,
@@ -1141,6 +1142,8 @@ export function Sidebar() {
 
       {/* Bottom Section - Running Agents / Bug Report / Settings */}
       <div className="border-t border-sidebar-border bg-sidebar-accent/10 shrink-0">
+        {/* Course Promo Badge */}
+        <CoursePromoBadge />
         {/* Running Agents Link */}
         <div className="p-2 pb-0">
           <button

@@ -381,6 +381,8 @@ export class HttpApiClient implements ElectronAPI {
         hasStoredApiKey?: boolean;
         hasEnvApiKey?: boolean;
         hasEnvOAuthToken?: boolean;
+        hasCliAuth?: boolean;
+        hasRecentActivity?: boolean;
       };
       error?: string;
     }> => this.get("/api/setup/claude-status"),
