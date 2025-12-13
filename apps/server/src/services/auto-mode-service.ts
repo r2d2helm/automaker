@@ -326,6 +326,46 @@ export class AutoModeService {
       // No worktree, use project path
     }
 
+    // Load feature info for context
+    const feature = await this.loadFeature(projectPath, featureId);
+
+    // Load previous agent output if it exists
+    const contextPath = path.join(
+      projectPath,
+      ".automaker",
+      "features",
+      featureId,
+      "agent-output.md"
+    );
+    let previousContext = "";
+    try {
+      previousContext = await fs.readFile(contextPath, "utf-8");
+    } catch {
+      // No previous context
+    }
+
+    // Build complete prompt with feature info, previous context, and follow-up instructions
+    let fullPrompt = `## Follow-up on Feature Implementation
+
+${feature ? this.buildFeaturePrompt(feature) : `**Feature ID:** ${featureId}`}
+`;
+
+    if (previousContext) {
+      fullPrompt += `
+## Previous Agent Work
+The following is the output from the previous implementation attempt:
+
+${previousContext}
+`;
+    }
+
+    fullPrompt += `
+## Follow-up Instructions
+${prompt}
+
+## Task
+Address the follow-up instructions above. Review the previous work and make the requested changes or fixes.`;
+
     this.runningFeatures.set(featureId, {
       featureId,
       projectPath,
@@ -339,12 +379,11 @@ export class AutoModeService {
     this.emitAutoModeEvent("auto_mode_feature_start", {
       featureId,
       projectPath,
-      feature: { id: featureId, title: "Follow-up", description: prompt.substring(0, 100) },
+      feature: feature || { id: featureId, title: "Follow-up", description: prompt.substring(0, 100) },
     });
 
     try {
-      // Load feature to get its model
-      const feature = await this.loadFeature(projectPath, featureId);
+      // Get model from feature (already loaded above)
       const model = resolveModelString(feature?.model, DEFAULT_MODELS.claude);
       console.log(`[AutoMode] Follow-up for feature ${featureId} using model: ${model}`);
 
@@ -401,41 +440,6 @@ export class AutoModeService {
         feature.imagePaths = [...currentImagePaths, ...newImagePaths];
       }
 
-      // Load previous agent output for context
-      const outputPath = path.join(
-        workDir,
-        ".automaker",
-        "features",
-        featureId,
-        "agent-output.md"
-      );
-      let previousContext = "";
-      try {
-        previousContext = await fs.readFile(outputPath, "utf-8");
-      } catch {
-        // No previous context
-      }
-
-      // Build follow-up prompt with context (feature now includes new images)
-      let followUpPrompt = prompt;
-      if (previousContext) {
-        followUpPrompt = `## Follow-up Request
-
-${this.buildFeaturePrompt(feature!)}
-
-## Previous Work
-The following is the output from the previous implementation:
-
-${previousContext}
-
----
-
-## New Instructions
-${prompt}
-
-Please continue from where you left off and address the new instructions above.`;
-      }
-
       // Combine original feature images with new follow-up images
       const allImagePaths: string[] = [];
 
@@ -464,7 +468,8 @@ Please continue from where you left off and address the new instructions above.`
         }
       }
 
-      await this.runAgent(workDir, featureId, followUpPrompt, abortController, allImagePaths.length > 0 ? allImagePaths : undefined, model);
+      // Use fullPrompt (already built above) with model and all images
+      await this.runAgent(workDir, featureId, fullPrompt, abortController, allImagePaths.length > 0 ? allImagePaths : imagePaths, model);
 
       // Mark as waiting_approval for user review
       await this.updateFeatureStatus(projectPath, featureId, "waiting_approval");
