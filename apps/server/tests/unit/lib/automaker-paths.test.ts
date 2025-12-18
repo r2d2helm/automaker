@@ -16,16 +16,19 @@ import {
 } from "@/lib/automaker-paths.js";
 
 describe("automaker-paths.ts", () => {
-  const projectPath = "/test/project";
+  const projectPath = path.join("/test", "project");
 
   describe("getAutomakerDir", () => {
     it("should return path to .automaker directory", () => {
-      expect(getAutomakerDir(projectPath)).toBe("/test/project/.automaker");
+      expect(getAutomakerDir(projectPath)).toBe(
+        path.join(projectPath, ".automaker")
+      );
     });
 
     it("should handle paths with trailing slashes", () => {
-      expect(getAutomakerDir("/test/project/")).toBe(
-        path.join("/test/project/", ".automaker")
+      const pathWithSlash = path.join("/test", "project") + path.sep;
+      expect(getAutomakerDir(pathWithSlash)).toBe(
+        path.join(pathWithSlash, ".automaker")
       );
     });
   });
@@ -33,7 +36,7 @@ describe("automaker-paths.ts", () => {
   describe("getFeaturesDir", () => {
     it("should return path to features directory", () => {
       expect(getFeaturesDir(projectPath)).toBe(
-        "/test/project/.automaker/features"
+        path.join(projectPath, ".automaker", "features")
       );
     });
   });
@@ -41,13 +44,13 @@ describe("automaker-paths.ts", () => {
   describe("getFeatureDir", () => {
     it("should return path to specific feature directory", () => {
       expect(getFeatureDir(projectPath, "feature-123")).toBe(
-        "/test/project/.automaker/features/feature-123"
+        path.join(projectPath, ".automaker", "features", "feature-123")
       );
     });
 
     it("should handle feature IDs with special characters", () => {
       expect(getFeatureDir(projectPath, "my-feature_v2")).toBe(
-        "/test/project/.automaker/features/my-feature_v2"
+        path.join(projectPath, ".automaker", "features", "my-feature_v2")
       );
     });
   });
@@ -55,27 +58,31 @@ describe("automaker-paths.ts", () => {
   describe("getFeatureImagesDir", () => {
     it("should return path to feature images directory", () => {
       expect(getFeatureImagesDir(projectPath, "feature-123")).toBe(
-        "/test/project/.automaker/features/feature-123/images"
+        path.join(projectPath, ".automaker", "features", "feature-123", "images")
       );
     });
   });
 
   describe("getBoardDir", () => {
     it("should return path to board directory", () => {
-      expect(getBoardDir(projectPath)).toBe("/test/project/.automaker/board");
+      expect(getBoardDir(projectPath)).toBe(
+        path.join(projectPath, ".automaker", "board")
+      );
     });
   });
 
   describe("getImagesDir", () => {
     it("should return path to images directory", () => {
-      expect(getImagesDir(projectPath)).toBe("/test/project/.automaker/images");
+      expect(getImagesDir(projectPath)).toBe(
+        path.join(projectPath, ".automaker", "images")
+      );
     });
   });
 
   describe("getWorktreesDir", () => {
     it("should return path to worktrees directory", () => {
       expect(getWorktreesDir(projectPath)).toBe(
-        "/test/project/.automaker/worktrees"
+        path.join(projectPath, ".automaker", "worktrees")
       );
     });
   });
@@ -83,7 +90,7 @@ describe("automaker-paths.ts", () => {
   describe("getAppSpecPath", () => {
     it("should return path to app_spec.txt file", () => {
       expect(getAppSpecPath(projectPath)).toBe(
-        "/test/project/.automaker/app_spec.txt"
+        path.join(projectPath, ".automaker", "app_spec.txt")
       );
     });
   });
@@ -91,7 +98,7 @@ describe("automaker-paths.ts", () => {
   describe("getBranchTrackingPath", () => {
     it("should return path to active-branches.json file", () => {
       expect(getBranchTrackingPath(projectPath)).toBe(
-        "/test/project/.automaker/active-branches.json"
+        path.join(projectPath, ".automaker", "active-branches.json")
       );
     });
   });
