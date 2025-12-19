@@ -7,6 +7,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { useAppStore } from "@/store/app-store";
 
 interface CoursePromoBadgeProps {
   sidebarOpen?: boolean;
@@ -14,8 +15,10 @@ interface CoursePromoBadgeProps {
 
 export function CoursePromoBadge({ sidebarOpen = true }: CoursePromoBadgeProps) {
   const [dismissed, setDismissed] = React.useState(false);
+  const hideMarketingContent = useAppStore((state) => state.hideMarketingContent);
 
-  if (dismissed) {
+  // If marketing content is hidden globally or dismissed locally, don't render
+  if (hideMarketingContent || dismissed) {
     return null;
   }
 

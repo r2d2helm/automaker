@@ -1,6 +1,6 @@
-import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import { Palette } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Palette, Megaphone } from "lucide-react";
 import { themeOptions } from "@/config/theme-options";
 import { cn } from "@/lib/utils";
 import type { Theme, Project } from "../shared/types";
@@ -8,13 +8,17 @@ import type { Theme, Project } from "../shared/types";
 interface AppearanceSectionProps {
   effectiveTheme: Theme;
   currentProject: Project | null;
+  hideMarketingContent: boolean;
   onThemeChange: (theme: Theme) => void;
+  onHideMarketingContentChange: (hide: boolean) => void;
 }
 
 export function AppearanceSection({
   effectiveTheme,
   currentProject,
+  hideMarketingContent,
   onThemeChange,
+  onHideMarketingContentChange,
 }: AppearanceSectionProps) {
   return (
     <div
@@ -79,6 +83,35 @@ export function AppearanceSection({
                 </button>
               );
             })}
+          </div>
+        </div>
+
+        {/* Separator */}
+        <div className="border-t border-border/30 my-4" />
+
+        {/* Hide Marketing Content Setting */}
+        <div className="group flex items-start space-x-3 p-3 rounded-xl hover:bg-accent/30 transition-colors duration-200 -mx-3">
+          <Checkbox
+            id="hide-marketing-content"
+            checked={hideMarketingContent}
+            onCheckedChange={(checked) =>
+              onHideMarketingContentChange(checked === true)
+            }
+            className="mt-1"
+            data-testid="hide-marketing-content-checkbox"
+          />
+          <div className="space-y-1.5">
+            <Label
+              htmlFor="hide-marketing-content"
+              className="text-foreground cursor-pointer font-medium flex items-center gap-2"
+            >
+              <Megaphone className="w-4 h-4 text-brand-500" />
+              Hide marketing content
+            </Label>
+            <p className="text-xs text-muted-foreground/80 leading-relaxed">
+              When enabled, hides promotional content like the &quot;Become a 10x Dev&quot; badge
+              in the sidebar. This setting persists across sessions.
+            </p>
           </div>
         </div>
       </div>

@@ -379,7 +379,7 @@ function LogEntryItem({ entry, isExpanded, onToggle }: LogEntryItemProps) {
               {formattedContent.map((part, index) => (
                 <div key={index}>
                   {part.type === "json" ? (
-                    <pre className="bg-zinc-900/50 rounded p-2 overflow-x-auto text-xs text-primary">
+                    <pre className="bg-zinc-900/50 rounded p-2 overflow-x-auto scrollbar-styled text-xs text-primary">
                       {part.content}
                     </pre>
                   ) : (
@@ -418,6 +418,8 @@ export function LogViewer({ output, className }: LogViewerProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [hiddenTypes, setHiddenTypes] = useState<Set<LogEntryType>>(new Set());
   const [hiddenCategories, setHiddenCategories] = useState<Set<ToolCategory>>(new Set());
+  // Track if user has "Expand All" mode active - new entries will auto-expand when this is true
+  const [expandAllMode, setExpandAllMode] = useState(false);
 
   // Parse entries and compute initial expanded state together
   const { entries, initialExpandedIds } = useMemo(() => {
@@ -442,16 +444,27 @@ export function LogViewer({ output, className }: LogViewerProps) {
   const appliedInitialRef = useRef<Set<string>>(new Set());
 
   // Apply initial expanded state for new entries
+  // Also auto-expand all entries when expandAllMode is active
   const effectiveExpandedIds = useMemo(() => {
     const result = new Set(expandedIds);
-    initialExpandedIds.forEach((id) => {
-      if (!appliedInitialRef.current.has(id)) {
-        appliedInitialRef.current.add(id);
-        result.add(id);
-      }
-    });
+
+    // If expand all mode is active, expand all filtered entries
+    if (expandAllMode) {
+      entries.forEach((entry) => {
+        result.add(entry.id);
+      });
+    } else {
+      // Otherwise, only auto-expand entries based on initial state (shouldCollapseByDefault)
+      initialExpandedIds.forEach((id) => {
+        if (!appliedInitialRef.current.has(id)) {
+          appliedInitialRef.current.add(id);
+          result.add(id);
+        }
+      });
+    }
+
     return result;
-  }, [expandedIds, initialExpandedIds]);
+  }, [expandedIds, initialExpandedIds, expandAllMode, entries]);
 
   // Calculate stats for tool categories
   const stats = useMemo(() => {
@@ -507,6 +520,10 @@ export function LogViewer({ output, className }: LogViewerProps) {
   }, [entries, hiddenTypes, hiddenCategories, searchQuery]);
 
   const toggleEntry = (id: string) => {
+    // When user manually collapses an entry, turn off expand all mode
+    if (effectiveExpandedIds.has(id)) {
+      setExpandAllMode(false);
+    }
     setExpandedIds((prev) => {
       const next = new Set(prev);
       if (next.has(id)) {
@@ -519,10 +536,14 @@ export function LogViewer({ output, className }: LogViewerProps) {
   };
 
   const expandAll = () => {
+    // Enable expand all mode so new entries will also be expanded
+    setExpandAllMode(true);
     setExpandedIds(new Set(filteredEntries.map((e) => e.id)));
   };
 
   const collapseAll = () => {
+    // Disable expand all mode when collapsing all
+    setExpandAllMode(false);
     setExpandedIds(new Set());
   };
 
@@ -565,7 +586,7 @@ export function LogViewer({ output, className }: LogViewerProps) {
           <Info className="w-8 h-8 mx-auto mb-2 opacity-50" />
           <p className="text-sm">No log entries yet. Logs will appear here as the process runs.</p>
           {output && output.trim() && (
-            <div className="mt-4 p-3 bg-zinc-900/50 rounded text-xs font-mono text-left max-h-40 overflow-auto">
+            <div className="mt-4 p-3 bg-zinc-900/50 rounded text-xs font-mono text-left max-h-40 overflow-auto scrollbar-styled">
               <pre className="whitespace-pre-wrap">{output}</pre>
             </div>
           )}
@@ -699,10 +720,16 @@ export function LogViewer({ output, className }: LogViewerProps) {
           </span>
           <button
             onClick={expandAll}
-            className="text-xs text-zinc-400 hover:text-zinc-200 px-2 py-1 rounded hover:bg-zinc-800/50 transition-colors"
+            className={cn(
+              "text-xs px-2 py-1 rounded transition-colors",
+              expandAllMode
+                ? "text-primary bg-primary/20 hover:bg-primary/30"
+                : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/50"
+            )}
             data-testid="log-expand-all"
+            title={expandAllMode ? "Expand All (Active - new items will auto-expand)" : "Expand All"}
           >
-            Expand All
+            Expand All{expandAllMode ? " (On)" : ""}
           </button>
           <button
             onClick={collapseAll}

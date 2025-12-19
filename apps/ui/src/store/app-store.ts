@@ -459,6 +459,9 @@ export interface AppState {
   // Audio Settings
   muteDoneSound: boolean; // When true, mute the notification sound when agents complete (default: false)
 
+  // Marketing Settings
+  hideMarketingContent: boolean; // When true, hide marketing content like the "Become a 10x Dev" badge (default: false)
+
   // Enhancement Model Settings
   enhancementModel: AgentModel; // Model used for feature enhancement (default: sonnet)
 
@@ -670,6 +673,9 @@ export interface AppActions {
   // Audio Settings actions
   setMuteDoneSound: (muted: boolean) => void;
 
+  // Marketing Settings actions
+  setHideMarketingContent: (hide: boolean) => void;
+
   // Enhancement Model actions
   setEnhancementModel: (model: AgentModel) => void;
 
@@ -824,6 +830,7 @@ const initialState: AppState = {
   showProfilesOnly: false, // Default to showing all options (not profiles only)
   keyboardShortcuts: DEFAULT_KEYBOARD_SHORTCUTS, // Default keyboard shortcuts
   muteDoneSound: false, // Default to sound enabled (not muted)
+  hideMarketingContent: false, // Default to showing marketing content
   enhancementModel: "sonnet", // Default to sonnet for feature enhancement
   aiProfiles: DEFAULT_AI_PROFILES,
   projectAnalysis: null,
@@ -1486,6 +1493,9 @@ export const useAppStore = create<AppState & AppActions>()(
 
       // Audio Settings actions
       setMuteDoneSound: (muted) => set({ muteDoneSound: muted }),
+
+      // Marketing Settings actions
+      setHideMarketingContent: (hide) => set({ hideMarketingContent: hide }),
 
       // Enhancement Model actions
       setEnhancementModel: (model) => set({ enhancementModel: model }),
@@ -2331,6 +2341,7 @@ export const useAppStore = create<AppState & AppActions>()(
         showProfilesOnly: state.showProfilesOnly,
         keyboardShortcuts: state.keyboardShortcuts,
         muteDoneSound: state.muteDoneSound,
+        hideMarketingContent: state.hideMarketingContent,
         enhancementModel: state.enhancementModel,
         // Profiles and sessions
         aiProfiles: state.aiProfiles,
