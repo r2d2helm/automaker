@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="apps/ui/public/readme_logo.png" alt="Automaker Logo" height="80" />
+  <img src="apps/ui/public/readme_logo.svg" alt="Automaker Logo" height="80" />
 </p>
 
 > **[!TIP]**
