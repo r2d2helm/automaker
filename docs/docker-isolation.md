@@ -78,7 +78,7 @@ echo "CURSOR_AUTH_TOKEN=$(./scripts/get-cursor-token.sh)" >> .env
 **Note**: The cursor-agent CLI stores its OAuth tokens separately from the Cursor IDE:
 
 - **macOS**: Tokens are stored in Keychain (service: `cursor-access-token`)
-- **Linux**: Tokens are stored in `~/.config/cursor/auth.json`
+- **Linux**: Tokens are stored in `~/.config/cursor/auth.json` (not `~/.cursor`)
 
 ### Apply to container
 

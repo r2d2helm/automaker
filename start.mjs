@@ -57,6 +57,14 @@ const processes = {
 };
 
 /**
+ * Sanitize a project name to be safe for use in shell commands and Docker image names.
+ * Converts to lowercase and removes any characters that aren't alphanumeric.
+ */
+function sanitizeProjectName(name) {
+  return name.toLowerCase().replace(/[^a-z0-9]/g, '');
+}
+
+/**
  * Check if Docker images need to be rebuilt based on Dockerfile or package.json changes
  */
 function shouldRebuildDockerImages() {
@@ -69,34 +77,26 @@ function shouldRebuildDockerImages() {
     const packageJsonMtime = statSync(packageJsonPath).mtimeMs;
     const latestSourceMtime = Math.max(dockerfileMtime, packageJsonMtime);
 
-    // Get image names from docker-compose config
-    let serverImageName, uiImageName;
+    // Get project name from docker-compose config, falling back to directory name
+    let projectName;
     try {
       const composeConfig = execSync('docker compose config --format json', {
         encoding: 'utf-8',
         cwd: __dirname,
       });
       const config = JSON.parse(composeConfig);
-
-      // Docker Compose generates image names as <project>_<service>
-      // Get project name from config or default to directory name
-      const projectName =
-        config.name ||
-        path
-          .basename(__dirname)
-          .toLowerCase()
-          .replace(/[^a-z0-9]/g, '');
-      serverImageName = `${projectName}_server`;
-      uiImageName = `${projectName}_ui`;
+      projectName = config.name;
     } catch (error) {
-      // Fallback to default naming convention
-      const projectName = path
-        .basename(__dirname)
-        .toLowerCase()
-        .replace(/[^a-z0-9]/g, '');
-      serverImageName = `${projectName}_server`;
-      uiImageName = `${projectName}_ui`;
+      // Fallback handled below
     }
+
+    // Sanitize project name (whether from config or fallback)
+    // This prevents command injection and ensures valid Docker image names
+    const sanitizedProjectName = sanitizeProjectName(
+      projectName || path.basename(__dirname)
+    );
+    const serverImageName = `${sanitizedProjectName}_server`;
+    const uiImageName = `${sanitizedProjectName}_ui`;
 
     // Check if images exist and get their creation times
     let needsRebuild = false;

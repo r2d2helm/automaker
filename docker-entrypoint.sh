@@ -17,19 +17,13 @@ fi
 chown -R automaker:automaker /home/automaker/.claude
 chmod 700 /home/automaker/.claude
 
-# Fix permissions on Cursor CLI config directory if it exists
-# This handles the case where a volume is mounted and owned by root
-if [ -d "/home/automaker/.cursor" ]; then
-    chown -R automaker:automaker /home/automaker/.cursor
-    chmod -R 700 /home/automaker/.cursor
-fi
-
-# Ensure the directory exists with correct permissions if volume is empty
+# Ensure Cursor CLI config directory exists with correct permissions
+# This handles both: mounted volumes (owned by root) and empty directories
 if [ ! -d "/home/automaker/.cursor" ]; then
     mkdir -p /home/automaker/.cursor
-    chown automaker:automaker /home/automaker/.cursor
-    chmod 700 /home/automaker/.cursor
 fi
+chown -R automaker:automaker /home/automaker/.cursor
+chmod -R 700 /home/automaker/.cursor
 
 # If CURSOR_AUTH_TOKEN is set, write it to the cursor auth file
 # On Linux, cursor-agent uses ~/.config/cursor/auth.json for file-based credential storage
