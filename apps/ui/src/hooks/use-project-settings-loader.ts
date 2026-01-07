@@ -39,36 +39,26 @@ export function useProjectSettingsLoader() {
 
         if (result.success && result.settings?.boardBackground) {
           const bg = result.settings.boardBackground;
+          const projectPath = currentProject.path;
 
           // Update store with loaded settings (without triggering server save)
-          setBoardBackground(currentProject.path, bg.imagePath);
+          setBoardBackground(projectPath, bg.imagePath);
 
-          if (bg.cardOpacity !== undefined) {
-            setCardOpacity(currentProject.path, bg.cardOpacity);
-          }
+          const settingsMap = {
+            cardOpacity: setCardOpacity,
+            columnOpacity: setColumnOpacity,
+            columnBorderEnabled: setColumnBorderEnabled,
+            cardGlassmorphism: setCardGlassmorphism,
+            cardBorderEnabled: setCardBorderEnabled,
+            cardBorderOpacity: setCardBorderOpacity,
+            hideScrollbar: setHideScrollbar,
+          } as const;
 
-          if (bg.columnOpacity !== undefined) {
-            setColumnOpacity(currentProject.path, bg.columnOpacity);
-          }
-
-          if (bg.columnBorderEnabled !== undefined) {
-            setColumnBorderEnabled(currentProject.path, bg.columnBorderEnabled);
-          }
-
-          if (bg.cardGlassmorphism !== undefined) {
-            setCardGlassmorphism(currentProject.path, bg.cardGlassmorphism);
-          }
-
-          if (bg.cardBorderEnabled !== undefined) {
-            setCardBorderEnabled(currentProject.path, bg.cardBorderEnabled);
-          }
-
-          if (bg.cardBorderOpacity !== undefined) {
-            setCardBorderOpacity(currentProject.path, bg.cardBorderOpacity);
-          }
-
-          if (bg.hideScrollbar !== undefined) {
-            setHideScrollbar(currentProject.path, bg.hideScrollbar);
+          for (const [key, setter] of Object.entries(settingsMap)) {
+            const value = bg[key as keyof typeof bg];
+            if (value !== undefined) {
+              (setter as (path: string, val: typeof value) => void)(projectPath, value);
+            }
           }
         }
       } catch (error) {

@@ -186,7 +186,11 @@ test.describe('Board Background Persistence', () => {
 
     // CRITICAL: Wait for settings to be loaded (useProjectSettingsLoader hook)
     // This ensures the background settings are fetched from the server
-    await page.waitForTimeout(2000);
+    await page.waitForResponse(
+      (resp) =>
+        resp.url().includes('/api/settings/project') &&
+        resp.request().postData()?.includes(projectAPath) === true
+    );
 
     // Check if background settings were applied by checking the store
     // We can't directly access React state, so we'll verify via DOM/CSS
@@ -235,7 +239,11 @@ test.describe('Board Background Persistence', () => {
     ).toBeVisible({ timeout: 5000 });
 
     // CRITICAL: Wait for settings to be loaded again
-    await page.waitForTimeout(2000);
+    await page.waitForResponse(
+      (resp) =>
+        resp.url().includes('/api/settings/project') &&
+        resp.request().postData()?.includes(projectAPath) === true
+    );
 
     // Verify that the settings API was called for project A (at least twice - initial load and switch back)
     const projectASettingsCalls = settingsApiCalls.filter((call) =>
@@ -370,7 +378,11 @@ test.describe('Board Background Persistence', () => {
     await expect(page.locator('[data-testid="board-view"]')).toBeVisible({ timeout: 15000 });
 
     // Wait for settings to load
-    await page.waitForTimeout(2000);
+    await page.waitForResponse(
+      (resp) =>
+        resp.url().includes('/api/settings/project') &&
+        resp.request().postData()?.includes(projectPath) === true
+    );
 
     // Verify that the settings API was called for this project
     const projectSettingsCalls = settingsApiCalls.filter((call) => call.body.includes(projectPath));
