@@ -362,21 +362,32 @@ export class OpencodeProvider extends CliProvider {
       case 'step_finish': {
         const finishEvent = openCodeEvent as OpenCodeFinishStepEvent;
 
-        // Check if the step failed
-        if (finishEvent.part?.error) {
+        // Check if the step failed (either has error field or reason is 'error')
+        if (finishEvent.part?.error || finishEvent.part?.reason === 'error') {
           return {
             type: 'error',
             session_id: finishEvent.sessionID,
-            error: finishEvent.part.error,
+            error: finishEvent.part?.error || 'Step execution failed',
           };
         }
 
         // Successful completion
-        return {
-          type: 'result',
-          subtype: 'success',
-          session_id: finishEvent.sessionID,
-        };
+        const result: { type: 'result'; subtype: 'success'; session_id?: string; result?: string } =
+          {
+            type: 'result',
+            subtype: 'success',
+          };
+
+        if (finishEvent.sessionID) {
+          result.session_id = finishEvent.sessionID;
+        }
+
+        // Include result text if provided
+        if (finishEvent.part?.result) {
+          result.result = finishEvent.part.result;
+        }
+
+        return result;
       }
 
       case 'tool_call': {

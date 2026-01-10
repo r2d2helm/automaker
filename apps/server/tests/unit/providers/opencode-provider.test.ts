@@ -219,14 +219,15 @@ describe('opencode-provider.ts', () => {
       expect(args).not.toContain('-c');
     });
 
-    it('should handle missing model', () => {
+    it('should handle model from opencode provider', () => {
       const args = provider.buildCliArgs({
         prompt: 'Hello',
-        cwd: '/tmp/project',
         model: 'opencode/big-pickle',
+        cwd: '/tmp/project',
       });
 
-      expect(args).not.toContain('--model');
+      expect(args).toContain('--model');
+      expect(args).toContain('opencode/big-pickle');
     });
   });
 
@@ -589,13 +590,12 @@ describe('opencode-provider.ts', () => {
       return mockedProvider;
     }
 
-    it('should stream text-delta events as assistant messages', async () => {
+    it('should stream text events as assistant messages', async () => {
       const mockedProvider = setupMockedProvider();
 
       const mockEvents = [
-        { type: 'text-delta', text: 'Hello ' },
-        { type: 'text-delta', text: 'World!' },
-        { type: 'text-end' },
+        { type: 'text', part: { type: 'text', text: 'Hello ' } },
+        { type: 'text', part: { type: 'text', text: 'World!' } },
       ];
 
       vi.mocked(spawnJSONLProcess).mockReturnValue(
@@ -614,7 +614,6 @@ describe('opencode-provider.ts', () => {
         })
       );
 
-      // text-end should be filtered out (returns null)
       expect(results).toHaveLength(2);
       expect(results[0].type).toBe('assistant');
       expect(results[0].message?.content[0].text).toBe('Hello ');
@@ -626,15 +625,21 @@ describe('opencode-provider.ts', () => {
 
       const mockEvents = [
         {
-          type: 'tool-call',
-          call_id: 'tool-1',
-          name: 'Read',
-          args: { file_path: '/tmp/test.txt' },
+          type: 'tool_call',
+          part: {
+            type: 'tool-call',
+            call_id: 'tool-1',
+            name: 'Read',
+            args: { file_path: '/tmp/test.txt' },
+          },
         },
         {
-          type: 'tool-result',
-          call_id: 'tool-1',
-          output: 'File contents',
+          type: 'tool_result',
+          part: {
+            type: 'tool-result',
+            call_id: 'tool-1',
+            output: 'File contents',
+          },
         },
       ];
 
@@ -721,10 +726,7 @@ describe('opencode-provider.ts', () => {
       const call = vi.mocked(spawnJSONLProcess).mock.calls[0][0];
       expect(call.args).toContain('run');
       expect(call.args).toContain('--format');
-      expect(call.args).toContain('stream-json');
-      expect(call.args).toContain('-q');
-      expect(call.args).toContain('-c');
-      expect(call.args).toContain('/tmp/workspace');
+      expect(call.args).toContain('json');
       expect(call.args).toContain('--model');
       expect(call.args).toContain('anthropic/claude-opus-4-5');
     });
@@ -734,9 +736,9 @@ describe('opencode-provider.ts', () => {
 
       const mockEvents = [
         { type: 'unknown-internal-event', data: 'ignored' },
-        { type: 'text-delta', text: 'Valid text' },
+        { type: 'text', part: { type: 'text', text: 'Valid text' } },
         { type: 'another-unknown', foo: 'bar' },
-        { type: 'finish-step', result: 'Done' },
+        { type: 'step_finish', part: { type: 'step-finish', reason: 'stop', result: 'Done' } },
       ];
 
       vi.mocked(spawnJSONLProcess).mockReturnValue(
@@ -750,6 +752,7 @@ describe('opencode-provider.ts', () => {
       const results = await collectAsyncGenerator<ProviderMessage>(
         mockedProvider.executeQuery({
           prompt: 'Test',
+          model: 'opencode/big-pickle',
           cwd: '/test',
         })
       );
@@ -1042,10 +1045,22 @@ describe('opencode-provider.ts', () => {
       const sessionId = 'test-session-123';
 
       const mockEvents = [
-        { type: 'text-delta', text: 'Hello ', session_id: sessionId },
-        { type: 'tool-call', name: 'Read', args: {}, call_id: 'c1', session_id: sessionId },
-        { type: 'tool-result', call_id: 'c1', output: 'file content', session_id: sessionId },
-        { type: 'finish-step', result: 'Done', session_id: sessionId },
+        { type: 'text', part: { type: 'text', text: 'Hello ' }, sessionID: sessionId },
+        {
+          type: 'tool_call',
+          part: { type: 'tool-call', name: 'Read', args: {}, call_id: 'c1' },
+          sessionID: sessionId,
+        },
+        {
+          type: 'tool_result',
+          part: { type: 'tool-result', call_id: 'c1', output: 'file content' },
+          sessionID: sessionId,
+        },
+        {
+          type: 'step_finish',
+          part: { type: 'step-finish', reason: 'stop', result: 'Done' },
+          sessionID: sessionId,
+        },
       ];
 
       vi.mocked(spawnJSONLProcess).mockReturnValue(
@@ -1059,6 +1074,7 @@ describe('opencode-provider.ts', () => {
       const results = await collectAsyncGenerator<ProviderMessage>(
         mockedProvider.executeQuery({
           prompt: 'Test',
+          model: 'opencode/big-pickle',
           cwd: '/tmp',
         })
       );
