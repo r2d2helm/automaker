@@ -122,9 +122,7 @@ test.describe('Board Background Persistence', () => {
       ],
     });
 
-    await authenticateForTests(page);
-
-    // Intercept settings API to use our test projects and clear currentProjectId
+    // Intercept settings API BEFORE authenticateForTests (which navigates to the page)
     // This ensures the app shows the welcome view with our test projects
     await page.route('**/api/settings/global', async (route) => {
       const response = await route.fetch();
@@ -151,6 +149,8 @@ test.describe('Board Background Persistence', () => {
       await route.fulfill({ response, json });
     });
 
+    await authenticateForTests(page);
+
     // Track API calls to /api/settings/project to verify settings are being loaded
     const settingsApiCalls: Array<{ url: string; method: string; body: string }> = [];
     page.on('request', (request) => {
@@ -163,24 +163,31 @@ test.describe('Board Background Persistence', () => {
       }
     });
 
-    // Navigate to the app
-    await page.goto('/');
+    // Navigate directly to dashboard to avoid auto-open which would bypass the project selection
+    await page.goto('/dashboard');
     await page.waitForLoadState('load');
     await handleLoginScreenIfPresent(page);
 
-    // Wait for welcome view
-    await expect(page.locator('[data-testid="welcome-view"]')).toBeVisible({ timeout: 10000 });
+    // Wait for dashboard view
+    await expect(page.locator('[data-testid="dashboard-view"]')).toBeVisible({ timeout: 10000 });
 
     // Open project A (has background settings)
-    const projectACard = page.locator(`[data-testid="recent-project-${projectAId}"]`);
+    const projectACard = page.locator(`[data-testid="project-card-${projectAId}"]`);
     await expect(projectACard).toBeVisible();
     await projectACard.click();
 
     // Wait for board view
     await expect(page.locator('[data-testid="board-view"]')).toBeVisible({ timeout: 15000 });
 
-    // Verify project A is current (check header paragraph which is always visible)
-    await expect(page.locator('[data-testid="board-view"]').getByText(projectAName)).toBeVisible({
+    // Ensure sidebar is expanded before checking project name
+    const expandSidebarButton = page.locator('button:has-text("Expand sidebar")');
+    if (await expandSidebarButton.isVisible()) {
+      await expandSidebarButton.click();
+      await page.waitForTimeout(300);
+    }
+
+    // Verify project A is current (project name appears in sidebar button)
+    await expect(page.getByRole('button', { name: new RegExp(projectAName) })).toBeVisible({
       timeout: 5000,
     });
 
@@ -195,13 +202,6 @@ test.describe('Board Background Persistence', () => {
 
     // Wait for initial project load to stabilize
     await page.waitForTimeout(500);
-
-    // Ensure sidebar is expanded before interacting with project selector
-    const expandSidebarButton = page.locator('button:has-text("Expand sidebar")');
-    if (await expandSidebarButton.isVisible()) {
-      await expandSidebarButton.click();
-      await page.waitForTimeout(300);
-    }
 
     // Switch to project B (no background)
     const projectSelector = page.locator('[data-testid="project-selector"]');
