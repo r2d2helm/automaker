@@ -368,6 +368,13 @@ export function createListHandler() {
         : new Map<string, WorktreePRInfo>();
 
       for (const worktree of worktrees) {
+        // Skip PR assignment for the main worktree - it's not meaningful to show
+        // PRs on the main branch tab, and can be confusing if someone created
+        // a PR from main to another branch
+        if (worktree.isMain) {
+          continue;
+        }
+
         const metadata = allMetadata.get(worktree.branch);
         const githubPR = githubPRs.get(worktree.branch);
 
@@ -387,8 +394,8 @@ export function createListHandler() {
               );
             });
           }
-        } else if (metadata?.pr) {
-          // Fall back to stored metadata (for PRs not in recent GitHub response)
+        } else if (metadata?.pr && metadata.pr.state === 'OPEN') {
+          // Fall back to stored metadata only if the PR is still OPEN
           worktree.pr = metadata.pr;
         }
       }
