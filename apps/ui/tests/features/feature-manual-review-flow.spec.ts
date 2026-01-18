@@ -131,7 +131,8 @@ test.describe('Feature Manual Review Flow', () => {
     }
 
     // Verify we're on the correct project (project switcher button shows project name)
-    await expect(page.getByTestId(`project-switcher-project-${projectName}`)).toBeVisible({
+    // Use ends-with selector since data-testid format is: project-switcher-{id}-{sanitizedName}
+    await expect(page.locator(`[data-testid$="-${projectName}"]`)).toBeVisible({
       timeout: 10000,
     });
 

@@ -78,7 +78,8 @@ test.describe('Project Creation', () => {
 
     // Wait for project to be set as current and visible on the page
     // The project name appears in the project switcher button
-    await expect(page.getByTestId(`project-switcher-project-${projectName}`)).toBeVisible({
+    // Use ends-with selector since data-testid format is: project-switcher-{id}-{sanitizedName}
+    await expect(page.locator(`[data-testid$="-${projectName}"]`)).toBeVisible({
       timeout: 15000,
     });
 

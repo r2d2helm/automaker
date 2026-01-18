@@ -37,10 +37,28 @@ export function ProjectSwitcherItem({
   const IconComponent = getIconComponent();
   const hasCustomIcon = !!project.customIconPath;
 
+  // Create a sanitized project name for test ID:
+  // - Convert to lowercase
+  // - Replace spaces with hyphens
+  // - Remove all non-alphanumeric characters except hyphens
+  // - Collapse multiple hyphens into single hyphen
+  // - Trim leading/trailing hyphens
+  const sanitizedName = project.name
+    .toLowerCase()
+    .replace(/\s+/g, '-')
+    .replace(/[^a-z0-9-]/g, '')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '');
+
+  // Combine project.id with sanitized name for uniqueness and readability
+  // Format: project-switcher-{id}-{sanitizedName}
+  const testId = `project-switcher-${project.id}-${sanitizedName}`;
+
   return (
     <button
       onClick={onClick}
       onContextMenu={onContextMenu}
+      data-testid={testId}
       className={cn(
         'group w-full aspect-square rounded-xl flex items-center justify-center relative overflow-hidden',
         'transition-all duration-200 ease-out',
@@ -60,7 +78,6 @@ export function ProjectSwitcherItem({
         'hover:scale-105 active:scale-95'
       )}
       title={project.name}
-      data-testid={`project-switcher-${project.id}`}
     >
       {hasCustomIcon ? (
         <img
