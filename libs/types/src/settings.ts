@@ -106,6 +106,15 @@ export type ModelProvider = 'claude' | 'cursor' | 'codex' | 'opencode';
 // ============================================================================
 
 /**
+ * ApiKeySource - Strategy for sourcing API keys
+ *
+ * - 'inline': API key stored directly in the profile (legacy/default behavior)
+ * - 'env': Use ANTHROPIC_API_KEY environment variable
+ * - 'credentials': Use the Anthropic key from Settings → API Keys (credentials.json)
+ */
+export type ApiKeySource = 'inline' | 'env' | 'credentials';
+
+/**
  * ClaudeApiProfile - Configuration for a Claude-compatible API endpoint
  *
  * Allows using alternative providers like z.AI GLM, AWS Bedrock, etc.
@@ -117,8 +126,15 @@ export interface ClaudeApiProfile {
   name: string;
   /** ANTHROPIC_BASE_URL - custom API endpoint */
   baseUrl: string;
-  /** API key value */
-  apiKey: string;
+  /**
+   * API key sourcing strategy (default: 'inline' for backwards compatibility)
+   * - 'inline': Use apiKey field value
+   * - 'env': Use ANTHROPIC_API_KEY environment variable
+   * - 'credentials': Use the Anthropic key from credentials.json
+   */
+  apiKeySource?: ApiKeySource;
+  /** API key value (only required when apiKeySource = 'inline' or undefined) */
+  apiKey?: string;
   /** If true, use ANTHROPIC_AUTH_TOKEN instead of ANTHROPIC_API_KEY */
   useAuthToken?: boolean;
   /** API_TIMEOUT_MS override in milliseconds */
@@ -140,6 +156,8 @@ export interface ClaudeApiProfile {
 export interface ClaudeApiProfileTemplate {
   name: string;
   baseUrl: string;
+  /** Default API key source for this template (user chooses when creating) */
+  defaultApiKeySource?: ApiKeySource;
   useAuthToken: boolean;
   timeoutMs?: number;
   modelMappings?: ClaudeApiProfile['modelMappings'];
@@ -151,8 +169,25 @@ export interface ClaudeApiProfileTemplate {
 /** Predefined templates for known Claude-compatible providers */
 export const CLAUDE_API_PROFILE_TEMPLATES: ClaudeApiProfileTemplate[] = [
   {
+    name: 'Direct Anthropic',
+    baseUrl: 'https://api.anthropic.com',
+    defaultApiKeySource: 'credentials',
+    useAuthToken: false,
+    description: 'Standard Anthropic API with your API key',
+    apiKeyUrl: 'https://console.anthropic.com/settings/keys',
+  },
+  {
+    name: 'OpenRouter',
+    baseUrl: 'https://openrouter.ai/api',
+    defaultApiKeySource: 'inline',
+    useAuthToken: true,
+    description: 'Access Claude and 300+ models via OpenRouter',
+    apiKeyUrl: 'https://openrouter.ai/keys',
+  },
+  {
     name: 'z.AI GLM',
     baseUrl: 'https://api.z.ai/api/anthropic',
+    defaultApiKeySource: 'inline',
     useAuthToken: true,
     timeoutMs: 3000000,
     modelMappings: {
@@ -163,6 +198,36 @@ export const CLAUDE_API_PROFILE_TEMPLATES: ClaudeApiProfileTemplate[] = [
     disableNonessentialTraffic: true,
     description: '3× usage at fraction of cost via GLM Coding Plan',
     apiKeyUrl: 'https://z.ai/manage-apikey/apikey-list',
+  },
+  {
+    name: 'MiniMax',
+    baseUrl: 'https://api.minimax.io/anthropic',
+    defaultApiKeySource: 'inline',
+    useAuthToken: true,
+    timeoutMs: 3000000,
+    modelMappings: {
+      haiku: 'MiniMax-M2.1',
+      sonnet: 'MiniMax-M2.1',
+      opus: 'MiniMax-M2.1',
+    },
+    disableNonessentialTraffic: true,
+    description: 'MiniMax M2.1 coding model with extended context',
+    apiKeyUrl: 'https://platform.minimax.io/user-center/basic-information/interface-key',
+  },
+  {
+    name: 'MiniMax (China)',
+    baseUrl: 'https://api.minimaxi.com/anthropic',
+    defaultApiKeySource: 'inline',
+    useAuthToken: true,
+    timeoutMs: 3000000,
+    modelMappings: {
+      haiku: 'MiniMax-M2.1',
+      sonnet: 'MiniMax-M2.1',
+      opus: 'MiniMax-M2.1',
+    },
+    disableNonessentialTraffic: true,
+    description: 'MiniMax M2.1 for users in China',
+    apiKeyUrl: 'https://platform.minimaxi.com/user-center/basic-information/interface-key',
   },
   // Future: Add AWS Bedrock, Google Vertex, etc.
 ];
@@ -906,7 +971,7 @@ export const DEFAULT_PHASE_MODELS: PhaseModelConfig = {
 };
 
 /** Current version of the global settings schema */
-export const SETTINGS_VERSION = 4;
+export const SETTINGS_VERSION = 5;
 /** Current version of the credentials schema */
 export const CREDENTIALS_VERSION = 1;
 /** Current version of the project settings schema */

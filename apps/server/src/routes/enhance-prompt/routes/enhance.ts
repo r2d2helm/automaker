@@ -130,7 +130,10 @@ export function createEnhanceHandler(
       logger.debug(`Using model: ${resolvedModel}`);
 
       // Get active Claude API profile for alternative endpoint configuration
-      const claudeApiProfile = await getActiveClaudeApiProfile(settingsService, '[EnhancePrompt]');
+      const { profile: claudeApiProfile, credentials } = await getActiveClaudeApiProfile(
+        settingsService,
+        '[EnhancePrompt]'
+      );
 
       // Use simpleQuery - provider abstraction handles routing to correct provider
       // The system prompt is combined with user prompt since some providers
@@ -144,6 +147,7 @@ export function createEnhanceHandler(
         thinkingLevel,
         readOnly: true, // Prompt enhancement only generates text, doesn't write files
         claudeApiProfile, // Pass active Claude API profile for alternative endpoint configuration
+        credentials, // Pass credentials for resolving 'credentials' apiKeySource
       });
 
       const enhancedText = result.text;

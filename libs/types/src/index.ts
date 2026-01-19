@@ -162,6 +162,7 @@ export type {
   EventHookAction,
   EventHook,
   // Claude API profile types
+  ApiKeySource,
   ClaudeApiProfile,
   ClaudeApiProfileTemplate,
 } from './settings.js';

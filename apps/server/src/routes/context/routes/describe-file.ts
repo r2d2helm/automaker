@@ -167,7 +167,10 @@ ${contentToAnalyze}`;
       logger.info(`Resolved model: ${model}, thinkingLevel: ${thinkingLevel}`);
 
       // Get active Claude API profile for alternative endpoint configuration
-      const claudeApiProfile = await getActiveClaudeApiProfile(settingsService, '[DescribeFile]');
+      const { profile: claudeApiProfile, credentials } = await getActiveClaudeApiProfile(
+        settingsService,
+        '[DescribeFile]'
+      );
 
       // Use simpleQuery - provider abstraction handles routing to correct provider
       const result = await simpleQuery({
@@ -180,6 +183,7 @@ ${contentToAnalyze}`;
         readOnly: true, // File description only reads, doesn't write
         settingSources: autoLoadClaudeMd ? ['user', 'project', 'local'] : undefined,
         claudeApiProfile, // Pass active Claude API profile for alternative endpoint configuration
+        credentials, // Pass credentials for resolving 'credentials' apiKeySource
       });
 
       const description = result.text;

@@ -197,7 +197,10 @@ ${prompts.suggestions.baseTemplate}`;
   logger.info('[Suggestions] Using model:', model);
 
   // Get active Claude API profile for alternative endpoint configuration
-  const claudeApiProfile = await getActiveClaudeApiProfile(settingsService, '[Suggestions]');
+  const { profile: claudeApiProfile, credentials } = await getActiveClaudeApiProfile(
+    settingsService,
+    '[Suggestions]'
+  );
 
   let responseText = '';
 
@@ -231,6 +234,7 @@ Your entire response should be valid JSON starting with { and ending with }. No 
     readOnly: true, // Suggestions only reads code, doesn't write
     settingSources: autoLoadClaudeMd ? ['user', 'project', 'local'] : undefined,
     claudeApiProfile, // Pass active Claude API profile for alternative endpoint configuration
+    credentials, // Pass credentials for resolving 'credentials' apiKeySource
     outputFormat: useStructuredOutput
       ? {
           type: 'json_schema',

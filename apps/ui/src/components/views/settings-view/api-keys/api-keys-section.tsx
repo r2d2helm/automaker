@@ -109,6 +109,15 @@ export function ApiKeysSection() {
         {/* Security Notice */}
         <SecurityNotice />
 
+        {/* Profile Usage Note */}
+        <div className="text-xs text-muted-foreground/80 px-1">
+          <p>
+            API Keys saved here can be used by API Profiles with "credentials" as the API key
+            source. This lets you share a single key across multiple profile configurations without
+            re-entering it.
+          </p>
+        </div>
+
         {/* Action Buttons */}
         <div className="flex flex-wrap items-center gap-3 pt-2">
           <Button

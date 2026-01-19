@@ -128,7 +128,10 @@ Generate ${featureCount} NEW features that build on each other logically. Rememb
   logger.info('Using model:', model);
 
   // Get active Claude API profile for alternative endpoint configuration
-  const claudeApiProfile = await getActiveClaudeApiProfile(settingsService, '[FeatureGeneration]');
+  const { profile: claudeApiProfile, credentials } = await getActiveClaudeApiProfile(
+    settingsService,
+    '[FeatureGeneration]'
+  );
 
   // Use streamingQuery with event callbacks
   const result = await streamingQuery({
@@ -142,6 +145,7 @@ Generate ${featureCount} NEW features that build on each other logically. Rememb
     readOnly: true, // Feature generation only reads code, doesn't write
     settingSources: autoLoadClaudeMd ? ['user', 'project', 'local'] : undefined,
     claudeApiProfile, // Pass active Claude API profile for alternative endpoint configuration
+    credentials, // Pass credentials for resolving 'credentials' apiKeySource
     onText: (text) => {
       logger.debug(`Feature text block received (${text.length} chars)`);
       events.emit('spec-regeneration:event', {

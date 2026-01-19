@@ -14,6 +14,7 @@ import {
   getThinkingTokenBudget,
   validateBareModelId,
   type ClaudeApiProfile,
+  type Credentials,
 } from '@automaker/types';
 import type {
   ExecuteOptions,
@@ -56,19 +57,47 @@ const SYSTEM_ENV_VARS = ['PATH', 'HOME', 'SHELL', 'TERM', 'USER', 'LANG', 'LC_AL
  * When no profile is provided, uses direct Anthropic API settings from process.env.
  *
  * @param profile - Optional Claude API profile for alternative endpoint configuration
+ * @param credentials - Optional credentials object for resolving 'credentials' apiKeySource
  */
-function buildEnv(profile?: ClaudeApiProfile): Record<string, string | undefined> {
+function buildEnv(
+  profile?: ClaudeApiProfile,
+  credentials?: Credentials
+): Record<string, string | undefined> {
   const env: Record<string, string | undefined> = {};
 
   if (profile) {
     // Use profile configuration (clean switch - don't inherit non-system vars from process.env)
-    logger.debug('Building environment from Claude API profile:', { name: profile.name });
+    logger.debug('Building environment from Claude API profile:', {
+      name: profile.name,
+      apiKeySource: profile.apiKeySource ?? 'inline',
+    });
+
+    // Resolve API key based on source strategy
+    let apiKey: string | undefined;
+    const source = profile.apiKeySource ?? 'inline'; // Default to inline for backwards compat
+
+    switch (source) {
+      case 'inline':
+        apiKey = profile.apiKey;
+        break;
+      case 'env':
+        apiKey = process.env.ANTHROPIC_API_KEY;
+        break;
+      case 'credentials':
+        apiKey = credentials?.apiKeys?.anthropic;
+        break;
+    }
+
+    // Warn if no API key found
+    if (!apiKey) {
+      logger.warn(`No API key found for profile "${profile.name}" with source "${source}"`);
+    }
 
     // Authentication
     if (profile.useAuthToken) {
-      env['ANTHROPIC_AUTH_TOKEN'] = profile.apiKey;
+      env['ANTHROPIC_AUTH_TOKEN'] = apiKey;
     } else {
-      env['ANTHROPIC_API_KEY'] = profile.apiKey;
+      env['ANTHROPIC_API_KEY'] = apiKey;
     }
 
     // Endpoint configuration
@@ -149,6 +178,7 @@ export class ClaudeProvider extends BaseProvider {
       sdkSessionId,
       thinkingLevel,
       claudeApiProfile,
+      credentials,
     } = options;
 
     // Convert thinking level to token budget
@@ -163,7 +193,7 @@ export class ClaudeProvider extends BaseProvider {
       // Pass only explicitly allowed environment variables to SDK
       // When a profile is active, uses profile settings (clean switch)
       // When no profile, uses direct Anthropic API (from process.env or CLI OAuth)
-      env: buildEnv(claudeApiProfile),
+      env: buildEnv(claudeApiProfile, credentials),
       // Pass through allowedTools if provided by caller (decided by sdk-options.ts)
       ...(allowedTools && { allowedTools }),
       // AUTONOMOUS MODE: Always bypass permissions for fully autonomous operation

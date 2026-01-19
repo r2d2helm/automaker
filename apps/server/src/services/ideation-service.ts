@@ -224,7 +224,7 @@ export class IdeationService {
       const bareModel = stripProviderPrefix(modelId);
 
       // Get active Claude API profile for alternative endpoint configuration
-      const claudeApiProfile = await getActiveClaudeApiProfile(
+      const { profile: claudeApiProfile, credentials } = await getActiveClaudeApiProfile(
         this.settingsService,
         '[IdeationService]'
       );
@@ -239,6 +239,7 @@ export class IdeationService {
         abortController: activeSession.abortController!,
         conversationHistory: conversationHistory.length > 0 ? conversationHistory : undefined,
         claudeApiProfile, // Pass active Claude API profile for alternative endpoint configuration
+        credentials, // Pass credentials for resolving 'credentials' apiKeySource
       };
 
       const stream = provider.executeQuery(executeOptions);
@@ -686,7 +687,7 @@ export class IdeationService {
       const bareModel = stripProviderPrefix(modelId);
 
       // Get active Claude API profile for alternative endpoint configuration
-      const claudeApiProfile = await getActiveClaudeApiProfile(
+      const { profile: claudeApiProfile, credentials } = await getActiveClaudeApiProfile(
         this.settingsService,
         '[IdeationService]'
       );
@@ -702,6 +703,7 @@ export class IdeationService {
         allowedTools: [],
         abortController: new AbortController(),
         claudeApiProfile, // Pass active Claude API profile for alternative endpoint configuration
+        credentials, // Pass credentials for resolving 'credentials' apiKeySource
       };
 
       const stream = provider.executeQuery(executeOptions);

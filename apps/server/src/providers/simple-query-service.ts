@@ -21,6 +21,7 @@ import type {
   ThinkingLevel,
   ReasoningEffort,
   ClaudeApiProfile,
+  Credentials,
 } from '@automaker/types';
 import { stripProviderPrefix } from '@automaker/types';
 
@@ -57,6 +58,8 @@ export interface SimpleQueryOptions {
   settingSources?: Array<'user' | 'project' | 'local'>;
   /** Active Claude API profile for alternative endpoint configuration */
   claudeApiProfile?: ClaudeApiProfile;
+  /** Credentials for resolving 'credentials' apiKeySource in Claude API profiles */
+  credentials?: Credentials;
 }
 
 /**
@@ -129,6 +132,7 @@ export async function simpleQuery(options: SimpleQueryOptions): Promise<SimpleQu
     readOnly: options.readOnly,
     settingSources: options.settingSources,
     claudeApiProfile: options.claudeApiProfile, // Pass active Claude API profile for alternative endpoint configuration
+    credentials: options.credentials, // Pass credentials for resolving 'credentials' apiKeySource
   };
 
   for await (const msg of provider.executeQuery(providerOptions)) {
@@ -212,6 +216,7 @@ export async function streamingQuery(options: StreamingQueryOptions): Promise<Si
     readOnly: options.readOnly,
     settingSources: options.settingSources,
     claudeApiProfile: options.claudeApiProfile, // Pass active Claude API profile for alternative endpoint configuration
+    credentials: options.credentials, // Pass credentials for resolving 'credentials' apiKeySource
   };
 
   for await (const msg of provider.executeQuery(providerOptions)) {

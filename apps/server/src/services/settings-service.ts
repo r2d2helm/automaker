@@ -166,6 +166,41 @@ export class SettingsService {
       needsSave = true;
     }
 
+    // Migration v4 -> v5: Auto-create "Direct Anthropic" profile for existing users
+    // If user has an Anthropic API key in credentials but no profiles, create a
+    // "Direct Anthropic" profile that references the credentials and set it as active.
+    if (storedVersion < 5) {
+      try {
+        const credentials = await this.getCredentials();
+        const hasAnthropicKey = !!credentials.apiKeys?.anthropic;
+        const hasNoProfiles = !result.claudeApiProfiles || result.claudeApiProfiles.length === 0;
+        const hasNoActiveProfile = !result.activeClaudeApiProfileId;
+
+        if (hasAnthropicKey && hasNoProfiles && hasNoActiveProfile) {
+          const directAnthropicProfile = {
+            id: `profile-${Date.now()}-direct-anthropic`,
+            name: 'Direct Anthropic',
+            baseUrl: 'https://api.anthropic.com',
+            apiKeySource: 'credentials' as const,
+            useAuthToken: false,
+          };
+
+          result.claudeApiProfiles = [directAnthropicProfile];
+          result.activeClaudeApiProfileId = directAnthropicProfile.id;
+
+          logger.info(
+            'Migration v4->v5: Created "Direct Anthropic" profile using existing credentials'
+          );
+        }
+      } catch (error) {
+        logger.warn(
+          'Migration v4->v5: Could not check credentials for auto-profile creation:',
+          error
+        );
+      }
+      needsSave = true;
+    }
+
     // Update version if any migration occurred
     if (needsSave) {
       result.version = SETTINGS_VERSION;

@@ -39,7 +39,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import type { ClaudeApiProfile } from '@automaker/types';
+import type { ClaudeApiProfile, ApiKeySource } from '@automaker/types';
 import { CLAUDE_API_PROFILE_TEMPLATES } from '@automaker/types';
 
 // Generate unique ID for profiles
@@ -56,6 +56,7 @@ function maskApiKey(key: string): string {
 interface ProfileFormData {
   name: string;
   baseUrl: string;
+  apiKeySource: ApiKeySource;
   apiKey: string;
   useAuthToken: boolean;
   timeoutMs: string; // String for input, convert to number
@@ -70,6 +71,7 @@ interface ProfileFormData {
 const emptyFormData: ProfileFormData = {
   name: '',
   baseUrl: '',
+  apiKeySource: 'inline',
   apiKey: '',
   useAuthToken: false,
   timeoutMs: '',
@@ -109,6 +111,7 @@ export function ApiProfilesSection() {
       setFormData({
         name: template.name,
         baseUrl: template.baseUrl,
+        apiKeySource: template.defaultApiKeySource ?? 'inline',
         apiKey: '',
         useAuthToken: template.useAuthToken,
         timeoutMs: template.timeoutMs?.toString() ?? '',
@@ -137,7 +140,8 @@ export function ApiProfilesSection() {
     setFormData({
       name: profile.name,
       baseUrl: profile.baseUrl,
-      apiKey: profile.apiKey,
+      apiKeySource: profile.apiKeySource ?? 'inline',
+      apiKey: profile.apiKey ?? '',
       useAuthToken: profile.useAuthToken ?? false,
       timeoutMs: profile.timeoutMs?.toString() ?? '',
       modelMappings: {
@@ -158,7 +162,9 @@ export function ApiProfilesSection() {
       id: editingProfileId ?? generateProfileId(),
       name: formData.name.trim(),
       baseUrl: formData.baseUrl.trim(),
-      apiKey: formData.apiKey,
+      apiKeySource: formData.apiKeySource,
+      // Only include apiKey when source is 'inline'
+      apiKey: formData.apiKeySource === 'inline' ? formData.apiKey : undefined,
       useAuthToken: formData.useAuthToken,
       timeoutMs: formData.timeoutMs ? parseInt(formData.timeoutMs, 10) : undefined,
       modelMappings:
@@ -188,10 +194,11 @@ export function ApiProfilesSection() {
     setDeleteConfirmId(null);
   };
 
+  // API key is only required when source is 'inline'
   const isFormValid =
     formData.name.trim().length > 0 &&
     formData.baseUrl.trim().length > 0 &&
-    formData.apiKey.length > 0;
+    (formData.apiKeySource !== 'inline' || formData.apiKey.length > 0);
 
   return (
     <div
@@ -333,39 +340,73 @@ export function ApiProfilesSection() {
               />
             </div>
 
-            {/* API Key */}
+            {/* API Key Source */}
             <div className="space-y-2">
-              <Label htmlFor="profile-api-key">API Key</Label>
-              <div className="relative">
-                <Input
-                  id="profile-api-key"
-                  type={showApiKey ? 'text' : 'password'}
-                  value={formData.apiKey}
-                  onChange={(e) => setFormData({ ...formData, apiKey: e.target.value })}
-                  placeholder="Enter API key"
-                  className="pr-10"
-                />
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="absolute right-0 top-0 h-full px-3 text-muted-foreground hover:text-foreground hover:bg-transparent"
-                  onClick={() => setShowApiKey(!showApiKey)}
-                >
-                  {showApiKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                </Button>
-              </div>
-              {currentTemplate?.apiKeyUrl && (
-                <a
-                  href={currentTemplate.apiKeyUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1 text-xs text-brand-500 hover:text-brand-400"
-                >
-                  Get API Key from {currentTemplate.name} <ExternalLink className="w-3 h-3" />
-                </a>
+              <Label>API Key Source</Label>
+              <Select
+                value={formData.apiKeySource}
+                onValueChange={(value: ApiKeySource) =>
+                  setFormData({ ...formData, apiKeySource: value })
+                }
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Select API key source" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="credentials">
+                    Use saved API key (from Settings → API Keys)
+                  </SelectItem>
+                  <SelectItem value="env">Use environment variable (ANTHROPIC_API_KEY)</SelectItem>
+                  <SelectItem value="inline">Enter key for this profile only</SelectItem>
+                </SelectContent>
+              </Select>
+              {formData.apiKeySource === 'credentials' && (
+                <p className="text-xs text-muted-foreground">
+                  Will use the Anthropic key from Settings → API Keys
+                </p>
+              )}
+              {formData.apiKeySource === 'env' && (
+                <p className="text-xs text-muted-foreground">
+                  Will use ANTHROPIC_API_KEY environment variable
+                </p>
               )}
             </div>
+
+            {/* API Key (only shown for inline source) */}
+            {formData.apiKeySource === 'inline' && (
+              <div className="space-y-2">
+                <Label htmlFor="profile-api-key">API Key</Label>
+                <div className="relative">
+                  <Input
+                    id="profile-api-key"
+                    type={showApiKey ? 'text' : 'password'}
+                    value={formData.apiKey}
+                    onChange={(e) => setFormData({ ...formData, apiKey: e.target.value })}
+                    placeholder="Enter API key"
+                    className="pr-10"
+                  />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="absolute right-0 top-0 h-full px-3 text-muted-foreground hover:text-foreground hover:bg-transparent"
+                    onClick={() => setShowApiKey(!showApiKey)}
+                  >
+                    {showApiKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </Button>
+                </div>
+                {currentTemplate?.apiKeyUrl && (
+                  <a
+                    href={currentTemplate.apiKeyUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 text-xs text-brand-500 hover:text-brand-400"
+                  >
+                    Get API Key from {currentTemplate.name} <ExternalLink className="w-3 h-3" />
+                  </a>
+                )}
+              </div>
+            )}
 
             {/* Use Auth Token */}
             <div className="flex items-center justify-between py-2">

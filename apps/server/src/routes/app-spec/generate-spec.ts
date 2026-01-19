@@ -105,7 +105,10 @@ ${prompts.appSpec.structuredSpecInstructions}`;
   logger.info('Using model:', model);
 
   // Get active Claude API profile for alternative endpoint configuration
-  const claudeApiProfile = await getActiveClaudeApiProfile(settingsService, '[SpecRegeneration]');
+  const { profile: claudeApiProfile, credentials } = await getActiveClaudeApiProfile(
+    settingsService,
+    '[SpecRegeneration]'
+  );
 
   let responseText = '';
   let structuredOutput: SpecOutput | null = null;
@@ -140,6 +143,7 @@ Your entire response should be valid JSON starting with { and ending with }. No 
     readOnly: true, // Spec generation only reads code, we write the spec ourselves
     settingSources: autoLoadClaudeMd ? ['user', 'project', 'local'] : undefined,
     claudeApiProfile, // Pass active Claude API profile for alternative endpoint configuration
+    credentials, // Pass credentials for resolving 'credentials' apiKeySource
     outputFormat: useStructuredOutput
       ? {
           type: 'json_schema',

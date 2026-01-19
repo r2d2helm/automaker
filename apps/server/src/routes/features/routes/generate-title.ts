@@ -64,7 +64,10 @@ export function createGenerateTitleHandler(
       const systemPrompt = prompts.titleGeneration.systemPrompt;
 
       // Get active Claude API profile for alternative endpoint configuration
-      const claudeApiProfile = await getActiveClaudeApiProfile(settingsService, '[GenerateTitle]');
+      const { profile: claudeApiProfile, credentials } = await getActiveClaudeApiProfile(
+        settingsService,
+        '[GenerateTitle]'
+      );
 
       const userPrompt = `Generate a concise title for this feature:\n\n${trimmedDescription}`;
 
@@ -76,6 +79,7 @@ export function createGenerateTitleHandler(
         maxTurns: 1,
         allowedTools: [],
         claudeApiProfile, // Pass active Claude API profile for alternative endpoint configuration
+        credentials, // Pass credentials for resolving 'credentials' apiKeySource
       });
 
       const title = result.text;

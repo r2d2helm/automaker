@@ -2059,7 +2059,10 @@ Format your response as a structured markdown document.`;
       });
 
       // Get active Claude API profile for alternative endpoint configuration
-      const claudeApiProfile = await getActiveClaudeApiProfile(this.settingsService, '[AutoMode]');
+      const { profile: claudeApiProfile, credentials } = await getActiveClaudeApiProfile(
+        this.settingsService,
+        '[AutoMode]'
+      );
 
       const options: ExecuteOptions = {
         prompt,
@@ -2071,6 +2074,7 @@ Format your response as a structured markdown document.`;
         settingSources: sdkOptions.settingSources,
         thinkingLevel: analysisThinkingLevel, // Pass thinking level
         claudeApiProfile, // Pass active Claude API profile for alternative endpoint configuration
+        credentials, // Pass credentials for resolving 'credentials' apiKeySource
       };
 
       const stream = provider.executeQuery(options);
@@ -2940,7 +2944,10 @@ This mock response was generated because AUTOMAKER_MOCK_AGENT=true was set.
     }
 
     // Get active Claude API profile for alternative endpoint configuration
-    const claudeApiProfile = await getActiveClaudeApiProfile(this.settingsService, '[AutoMode]');
+    const { profile: claudeApiProfile, credentials } = await getActiveClaudeApiProfile(
+      this.settingsService,
+      '[AutoMode]'
+    );
 
     const executeOptions: ExecuteOptions = {
       prompt: promptContent,
@@ -2954,6 +2961,7 @@ This mock response was generated because AUTOMAKER_MOCK_AGENT=true was set.
       mcpServers: Object.keys(mcpServers).length > 0 ? mcpServers : undefined, // Pass MCP servers configuration
       thinkingLevel: options?.thinkingLevel, // Pass thinking level for extended thinking
       claudeApiProfile, // Pass active Claude API profile for alternative endpoint configuration
+      credentials, // Pass credentials for resolving 'credentials' apiKeySource
     };
 
     // Execute via provider

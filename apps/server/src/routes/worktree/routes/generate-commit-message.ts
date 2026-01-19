@@ -169,7 +169,7 @@ export function createGenerateCommitMessageHandler(
       const systemPrompt = await getSystemPrompt(settingsService);
 
       // Get active Claude API profile for alternative endpoint configuration
-      const claudeApiProfile = await getActiveClaudeApiProfile(
+      const { profile: claudeApiProfile, credentials } = await getActiveClaudeApiProfile(
         settingsService,
         '[GenerateCommitMessage]'
       );
@@ -196,6 +196,7 @@ export function createGenerateCommitMessageHandler(
         allowedTools: [],
         readOnly: true,
         claudeApiProfile, // Pass active Claude API profile for alternative endpoint configuration
+        credentials, // Pass credentials for resolving 'credentials' apiKeySource
       });
 
       // Wrap with timeout to prevent indefinite hangs

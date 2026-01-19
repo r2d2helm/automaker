@@ -161,7 +161,10 @@ export async function syncSpec(
   const { model, thinkingLevel } = resolvePhaseModel(phaseModelEntry);
 
   // Get active Claude API profile for alternative endpoint configuration
-  const claudeApiProfile = await getActiveClaudeApiProfile(settingsService, '[SpecSync]');
+  const { profile: claudeApiProfile, credentials } = await getActiveClaudeApiProfile(
+    settingsService,
+    '[SpecSync]'
+  );
 
   // Use AI to analyze tech stack
   const techAnalysisPrompt = `Analyze this project and return ONLY a JSON object with the current technology stack.
@@ -192,6 +195,7 @@ Return ONLY this JSON format, no other text:
       readOnly: true,
       settingSources: autoLoadClaudeMd ? ['user', 'project', 'local'] : undefined,
       claudeApiProfile, // Pass active Claude API profile for alternative endpoint configuration
+      credentials, // Pass credentials for resolving 'credentials' apiKeySource
       onText: (text) => {
         logger.debug(`Tech analysis text: ${text.substring(0, 100)}`);
       },

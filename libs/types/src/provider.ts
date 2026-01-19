@@ -2,7 +2,7 @@
  * Shared types for AI model providers
  */
 
-import type { ThinkingLevel, ClaudeApiProfile } from './settings.js';
+import type { ThinkingLevel, ClaudeApiProfile, Credentials } from './settings.js';
 import type { CodexSandboxMode, CodexApprovalPolicy } from './codex.js';
 
 /**
@@ -215,6 +215,11 @@ export interface ExecuteOptions {
    * When undefined, uses direct Anthropic API (via API key or Claude Max CLI OAuth).
    */
   claudeApiProfile?: ClaudeApiProfile;
+  /**
+   * Credentials for resolving 'credentials' apiKeySource in Claude API profiles.
+   * When a profile has apiKeySource='credentials', the Anthropic key from this object is used.
+   */
+  credentials?: Credentials;
 }
 
 /**

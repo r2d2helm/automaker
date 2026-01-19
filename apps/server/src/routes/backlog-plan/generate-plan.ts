@@ -166,7 +166,10 @@ ${userPrompt}`;
     }
 
     // Get active Claude API profile for alternative endpoint configuration
-    const claudeApiProfile = await getActiveClaudeApiProfile(settingsService, '[BacklogPlan]');
+    const { profile: claudeApiProfile, credentials } = await getActiveClaudeApiProfile(
+      settingsService,
+      '[BacklogPlan]'
+    );
 
     // Execute the query
     const stream = provider.executeQuery({
@@ -181,6 +184,7 @@ ${userPrompt}`;
       readOnly: true, // Plan generation only generates text, doesn't write files
       thinkingLevel, // Pass thinking level for extended thinking
       claudeApiProfile, // Pass active Claude API profile for alternative endpoint configuration
+      credentials, // Pass credentials for resolving 'credentials' apiKeySource
     });
 
     let responseText = '';

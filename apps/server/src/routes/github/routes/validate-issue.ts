@@ -170,7 +170,10 @@ ${basePrompt}`;
     logger.info(`Using model: ${model}`);
 
     // Get active Claude API profile for alternative endpoint configuration
-    const claudeApiProfile = await getActiveClaudeApiProfile(settingsService, '[IssueValidation]');
+    const { profile: claudeApiProfile, credentials } = await getActiveClaudeApiProfile(
+      settingsService,
+      '[IssueValidation]'
+    );
 
     // Use streamingQuery with event callbacks
     const result = await streamingQuery({
@@ -184,6 +187,7 @@ ${basePrompt}`;
       readOnly: true, // Issue validation only reads code, doesn't write
       settingSources: autoLoadClaudeMd ? ['user', 'project', 'local'] : undefined,
       claudeApiProfile, // Pass active Claude API profile for alternative endpoint configuration
+      credentials, // Pass credentials for resolving 'credentials' apiKeySource
       outputFormat: useStructuredOutput
         ? {
             type: 'json_schema',

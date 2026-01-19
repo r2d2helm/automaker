@@ -276,7 +276,7 @@ export class AgentService {
           : undefined;
 
       // Get active Claude API profile for alternative endpoint configuration
-      const claudeApiProfile = await getActiveClaudeApiProfile(
+      const { profile: claudeApiProfile, credentials } = await getActiveClaudeApiProfile(
         this.settingsService,
         '[AgentService]'
       );
@@ -386,6 +386,7 @@ export class AgentService {
         thinkingLevel: effectiveThinkingLevel, // Pass thinking level for Claude models
         reasoningEffort: effectiveReasoningEffort, // Pass reasoning effort for Codex models
         claudeApiProfile, // Pass active Claude API profile for alternative endpoint configuration
+        credentials, // Pass credentials for resolving 'credentials' apiKeySource
       };
 
       // Build prompt content with images

@@ -351,30 +351,39 @@ export async function getCustomSubagents(
   return Object.keys(merged).length > 0 ? merged : undefined;
 }
 
+/** Result from getActiveClaudeApiProfile */
+export interface ActiveClaudeApiProfileResult {
+  /** The active profile, or undefined if using direct Anthropic API */
+  profile: ClaudeApiProfile | undefined;
+  /** Credentials for resolving 'credentials' apiKeySource */
+  credentials: import('@automaker/types').Credentials | undefined;
+}
+
 /**
- * Get the active Claude API profile from global settings.
- * Returns undefined if no profile is active (uses direct Anthropic API).
+ * Get the active Claude API profile and credentials from global settings.
+ * Returns both the profile and credentials for resolving 'credentials' apiKeySource.
  *
  * @param settingsService - Optional settings service instance
  * @param logPrefix - Prefix for log messages (e.g., '[AgentService]')
- * @returns Promise resolving to the active profile, or undefined if none active
+ * @returns Promise resolving to object with profile and credentials
  */
 export async function getActiveClaudeApiProfile(
   settingsService?: SettingsService | null,
   logPrefix = '[SettingsHelper]'
-): Promise<ClaudeApiProfile | undefined> {
+): Promise<ActiveClaudeApiProfileResult> {
   if (!settingsService) {
-    return undefined;
+    return { profile: undefined, credentials: undefined };
   }
 
   try {
     const globalSettings = await settingsService.getGlobalSettings();
+    const credentials = await settingsService.getCredentials();
     const profiles = globalSettings.claudeApiProfiles || [];
     const activeProfileId = globalSettings.activeClaudeApiProfileId;
 
     // No active profile selected - use direct Anthropic API
     if (!activeProfileId) {
-      return undefined;
+      return { profile: undefined, credentials };
     }
 
     // Find the active profile by ID
@@ -382,15 +391,15 @@ export async function getActiveClaudeApiProfile(
 
     if (activeProfile) {
       logger.info(`${logPrefix} Using Claude API profile: ${activeProfile.name}`);
-      return activeProfile;
+      return { profile: activeProfile, credentials };
     } else {
       logger.warn(
         `${logPrefix} Active profile ID "${activeProfileId}" not found, falling back to direct Anthropic API`
       );
-      return undefined;
+      return { profile: undefined, credentials };
     }
   } catch (error) {
     logger.error(`${logPrefix} Failed to load Claude API profile:`, error);
-    return undefined;
+    return { profile: undefined, credentials: undefined };
   }
 }
