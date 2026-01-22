@@ -852,6 +852,20 @@ export class SettingsService {
       delete updated.defaultFeatureModel;
     }
 
+    // Handle devCommand special cases:
+    // - null means delete the key (use auto-detection)
+    // - string means custom command
+    if ('devCommand' in updates && updates.devCommand === null) {
+      delete updated.devCommand;
+    }
+
+    // Handle testCommand special cases:
+    // - null means delete the key (use auto-detection)
+    // - string means custom command
+    if ('testCommand' in updates && updates.testCommand === null) {
+      delete updated.testCommand;
+    }
+
     await writeSettingsJson(settingsPath, updated);
     logger.info(`Project settings updated for ${projectPath}`);
 

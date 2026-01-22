@@ -1190,6 +1190,14 @@ export interface ProjectSettings {
    */
   testCommand?: string;
 
+  // Dev Server Configuration
+  /**
+   * Custom command to start the development server for this project.
+   * If not specified, auto-detection will be used based on project structure.
+   * Examples: "npm run dev", "yarn dev", "pnpm dev", "cargo watch", "go run ."
+   */
+  devCommand?: string;
+
   // Phase Model Overrides (per-project)
   /**
    * Override phase model settings for this project.

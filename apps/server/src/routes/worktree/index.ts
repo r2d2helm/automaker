@@ -134,7 +134,7 @@ export function createWorktreeRoutes(
   router.post(
     '/start-dev',
     validatePathParams('projectPath', 'worktreePath'),
-    createStartDevHandler()
+    createStartDevHandler(settingsService)
   );
   router.post('/stop-dev', createStopDevHandler());
   router.post('/list-dev-servers', createListDevServersHandler());
