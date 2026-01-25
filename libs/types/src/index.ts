@@ -326,7 +326,9 @@ export type {
   IdeationEventType,
   IdeationStreamEvent,
   IdeationAnalysisEvent,
+  IdeationContextSources,
 } from './ideation.js';
+export { DEFAULT_IDEATION_CONTEXT_SOURCES } from './ideation.js';
 
 // Notification types
 export type { NotificationType, Notification, NotificationsFile } from './notification.js';

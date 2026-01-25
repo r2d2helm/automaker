@@ -68,7 +68,16 @@ export function useGenerateIdeationSuggestions(projectPath: string) {
         throw new Error('Ideation API not available');
       }
 
-      const result = await api.ideation.generateSuggestions(projectPath, promptId, category);
+      // Get context sources from store
+      const contextSources = useIdeationStore.getState().getContextSources(projectPath);
+
+      const result = await api.ideation.generateSuggestions(
+        projectPath,
+        promptId,
+        category,
+        undefined, // count - use default
+        contextSources
+      );
 
       if (!result.success) {
         throw new Error(result.error || 'Failed to generate suggestions');

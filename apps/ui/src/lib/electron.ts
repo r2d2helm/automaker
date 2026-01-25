@@ -27,6 +27,7 @@ import type {
   CreateIdeaInput,
   UpdateIdeaInput,
   ConvertToFeatureOptions,
+  IdeationContextSources,
 } from '@automaker/types';
 import { DEFAULT_MAX_CONCURRENCY } from '@automaker/types';
 import { getJSON, setJSON, removeItem } from './storage';
@@ -114,7 +115,8 @@ export interface IdeationAPI {
     projectPath: string,
     promptId: string,
     category: IdeaCategory,
-    count?: number
+    count?: number,
+    contextSources?: IdeationContextSources
   ) => Promise<{ success: boolean; suggestions?: AnalysisSuggestion[]; error?: string }>;
 
   // Convert to feature

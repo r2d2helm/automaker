@@ -32,6 +32,7 @@ import type {
   NotificationsAPI,
   EventHistoryAPI,
 } from './electron';
+import type { IdeationContextSources } from '@automaker/types';
 import type { EventHistoryFilter } from '@automaker/types';
 import type { Message, SessionListItem } from '@/types/electron';
 import type { Feature, ClaudeUsageResponse, CodexUsageResponse } from '@/store/app-store';
@@ -2739,9 +2740,16 @@ export class HttpApiClient implements ElectronAPI {
       projectPath: string,
       promptId: string,
       category: IdeaCategory,
-      count?: number
+      count?: number,
+      contextSources?: IdeationContextSources
     ) =>
-      this.post('/api/ideation/suggestions/generate', { projectPath, promptId, category, count }),
+      this.post('/api/ideation/suggestions/generate', {
+        projectPath,
+        promptId,
+        category,
+        count,
+        contextSources,
+      }),
 
     convertToFeature: (projectPath: string, ideaId: string, options?: ConvertToFeatureOptions) =>
       this.post('/api/ideation/convert', { projectPath, ideaId, ...options }),
