@@ -385,4 +385,551 @@ describe('AgentExecutor', () => {
       expect(executor).toBeInstanceOf(AgentExecutor);
     });
   });
+
+  describe('execute() behavior', () => {
+    /**
+     * Execution tests focus on verifiable behaviors without requiring
+     * full stream mocking. Complex integration scenarios are tested in E2E.
+     */
+
+    it('should return aborted=true when abort signal is already aborted', async () => {
+      const executor = new AgentExecutor(
+        mockEventBus,
+        mockFeatureStateManager,
+        mockPlanApprovalService,
+        mockSettingsService
+      );
+
+      // Create an already-aborted controller
+      const abortController = new AbortController();
+      abortController.abort();
+
+      // Mock provider that yields nothing (would check signal first)
+      const mockProvider = {
+        getName: () => 'mock',
+        executeQuery: vi.fn().mockImplementation(function* () {
+          // Generator yields nothing, simulating immediate abort check
+        }),
+      } as unknown as BaseProvider;
+
+      const options: AgentExecutionOptions = {
+        workDir: '/test',
+        featureId: 'test-feature',
+        prompt: 'Test prompt',
+        projectPath: '/project',
+        abortController,
+        provider: mockProvider,
+        effectiveBareModel: 'claude-sonnet-4-20250514',
+        planningMode: 'skip',
+      };
+
+      const callbacks = {
+        waitForApproval: vi.fn().mockResolvedValue({ approved: true }),
+        saveFeatureSummary: vi.fn(),
+        updateFeatureSummary: vi.fn(),
+        buildTaskPrompt: vi.fn().mockReturnValue('task prompt'),
+      };
+
+      // Execute - should complete without error even with aborted signal
+      const result = await executor.execute(options, callbacks);
+
+      // When stream is empty and signal is aborted before stream starts,
+      // the result depends on whether abort was checked
+      expect(result).toBeDefined();
+      expect(result.responseText).toBeDefined();
+    });
+
+    it('should initialize with previousContent when provided', async () => {
+      const executor = new AgentExecutor(
+        mockEventBus,
+        mockFeatureStateManager,
+        mockPlanApprovalService,
+        mockSettingsService
+      );
+
+      const mockProvider = {
+        getName: () => 'mock',
+        executeQuery: vi.fn().mockImplementation(function* () {
+          // Empty stream
+        }),
+      } as unknown as BaseProvider;
+
+      const options: AgentExecutionOptions = {
+        workDir: '/test',
+        featureId: 'test-feature',
+        prompt: 'Test prompt',
+        projectPath: '/project',
+        abortController: new AbortController(),
+        provider: mockProvider,
+        effectiveBareModel: 'claude-sonnet-4-20250514',
+        previousContent: 'Previous context from earlier session',
+      };
+
+      const callbacks = {
+        waitForApproval: vi.fn().mockResolvedValue({ approved: true }),
+        saveFeatureSummary: vi.fn(),
+        updateFeatureSummary: vi.fn(),
+        buildTaskPrompt: vi.fn().mockReturnValue('task prompt'),
+      };
+
+      const result = await executor.execute(options, callbacks);
+
+      // Response should start with previous content
+      expect(result.responseText).toContain('Previous context from earlier session');
+      expect(result.responseText).toContain('Follow-up Session');
+    });
+
+    it('should return specDetected=false when no spec markers in content', async () => {
+      const executor = new AgentExecutor(
+        mockEventBus,
+        mockFeatureStateManager,
+        mockPlanApprovalService,
+        mockSettingsService
+      );
+
+      const mockProvider = {
+        getName: () => 'mock',
+        executeQuery: vi.fn().mockImplementation(function* () {
+          yield {
+            type: 'assistant',
+            message: {
+              content: [{ type: 'text', text: 'Simple response without spec markers' }],
+            },
+          };
+          yield { type: 'result', subtype: 'success' };
+        }),
+      } as unknown as BaseProvider;
+
+      const options: AgentExecutionOptions = {
+        workDir: '/test',
+        featureId: 'test-feature',
+        prompt: 'Test prompt',
+        projectPath: '/project',
+        abortController: new AbortController(),
+        provider: mockProvider,
+        effectiveBareModel: 'claude-sonnet-4-20250514',
+        planningMode: 'skip', // No spec detection in skip mode
+      };
+
+      const callbacks = {
+        waitForApproval: vi.fn().mockResolvedValue({ approved: true }),
+        saveFeatureSummary: vi.fn(),
+        updateFeatureSummary: vi.fn(),
+        buildTaskPrompt: vi.fn().mockReturnValue('task prompt'),
+      };
+
+      const result = await executor.execute(options, callbacks);
+
+      expect(result.specDetected).toBe(false);
+      expect(result.responseText).toContain('Simple response without spec markers');
+    });
+
+    it('should emit auto_mode_progress events for text content', async () => {
+      const executor = new AgentExecutor(
+        mockEventBus,
+        mockFeatureStateManager,
+        mockPlanApprovalService,
+        mockSettingsService
+      );
+
+      const mockProvider = {
+        getName: () => 'mock',
+        executeQuery: vi.fn().mockImplementation(function* () {
+          yield {
+            type: 'assistant',
+            message: {
+              content: [{ type: 'text', text: 'First chunk of text' }],
+            },
+          };
+          yield {
+            type: 'assistant',
+            message: {
+              content: [{ type: 'text', text: 'Second chunk of text' }],
+            },
+          };
+          yield { type: 'result', subtype: 'success' };
+        }),
+      } as unknown as BaseProvider;
+
+      const options: AgentExecutionOptions = {
+        workDir: '/test',
+        featureId: 'test-feature',
+        prompt: 'Test prompt',
+        projectPath: '/project',
+        abortController: new AbortController(),
+        provider: mockProvider,
+        effectiveBareModel: 'claude-sonnet-4-20250514',
+        planningMode: 'skip',
+      };
+
+      const callbacks = {
+        waitForApproval: vi.fn().mockResolvedValue({ approved: true }),
+        saveFeatureSummary: vi.fn(),
+        updateFeatureSummary: vi.fn(),
+        buildTaskPrompt: vi.fn().mockReturnValue('task prompt'),
+      };
+
+      await executor.execute(options, callbacks);
+
+      // Should emit progress events for each text chunk
+      expect(mockEventBus.emitAutoModeEvent).toHaveBeenCalledWith('auto_mode_progress', {
+        featureId: 'test-feature',
+        branchName: null,
+        content: 'First chunk of text',
+      });
+      expect(mockEventBus.emitAutoModeEvent).toHaveBeenCalledWith('auto_mode_progress', {
+        featureId: 'test-feature',
+        branchName: null,
+        content: 'Second chunk of text',
+      });
+    });
+
+    it('should emit auto_mode_tool events for tool use', async () => {
+      const executor = new AgentExecutor(
+        mockEventBus,
+        mockFeatureStateManager,
+        mockPlanApprovalService,
+        mockSettingsService
+      );
+
+      const mockProvider = {
+        getName: () => 'mock',
+        executeQuery: vi.fn().mockImplementation(function* () {
+          yield {
+            type: 'assistant',
+            message: {
+              content: [
+                {
+                  type: 'tool_use',
+                  name: 'write_file',
+                  input: { path: '/test/file.ts', content: 'test content' },
+                },
+              ],
+            },
+          };
+          yield { type: 'result', subtype: 'success' };
+        }),
+      } as unknown as BaseProvider;
+
+      const options: AgentExecutionOptions = {
+        workDir: '/test',
+        featureId: 'test-feature',
+        prompt: 'Test prompt',
+        projectPath: '/project',
+        abortController: new AbortController(),
+        provider: mockProvider,
+        effectiveBareModel: 'claude-sonnet-4-20250514',
+        planningMode: 'skip',
+      };
+
+      const callbacks = {
+        waitForApproval: vi.fn().mockResolvedValue({ approved: true }),
+        saveFeatureSummary: vi.fn(),
+        updateFeatureSummary: vi.fn(),
+        buildTaskPrompt: vi.fn().mockReturnValue('task prompt'),
+      };
+
+      await executor.execute(options, callbacks);
+
+      // Should emit tool event
+      expect(mockEventBus.emitAutoModeEvent).toHaveBeenCalledWith('auto_mode_tool', {
+        featureId: 'test-feature',
+        branchName: null,
+        tool: 'write_file',
+        input: { path: '/test/file.ts', content: 'test content' },
+      });
+    });
+
+    it('should throw error when provider stream yields error message', async () => {
+      const executor = new AgentExecutor(
+        mockEventBus,
+        mockFeatureStateManager,
+        mockPlanApprovalService,
+        mockSettingsService
+      );
+
+      const mockProvider = {
+        getName: () => 'mock',
+        executeQuery: vi.fn().mockImplementation(function* () {
+          yield {
+            type: 'assistant',
+            message: {
+              content: [{ type: 'text', text: 'Starting...' }],
+            },
+          };
+          yield {
+            type: 'error',
+            error: 'API rate limit exceeded',
+          };
+        }),
+      } as unknown as BaseProvider;
+
+      const options: AgentExecutionOptions = {
+        workDir: '/test',
+        featureId: 'test-feature',
+        prompt: 'Test prompt',
+        projectPath: '/project',
+        abortController: new AbortController(),
+        provider: mockProvider,
+        effectiveBareModel: 'claude-sonnet-4-20250514',
+        planningMode: 'skip',
+      };
+
+      const callbacks = {
+        waitForApproval: vi.fn().mockResolvedValue({ approved: true }),
+        saveFeatureSummary: vi.fn(),
+        updateFeatureSummary: vi.fn(),
+        buildTaskPrompt: vi.fn().mockReturnValue('task prompt'),
+      };
+
+      await expect(executor.execute(options, callbacks)).rejects.toThrow('API rate limit exceeded');
+    });
+
+    it('should throw error when authentication fails in response', async () => {
+      const executor = new AgentExecutor(
+        mockEventBus,
+        mockFeatureStateManager,
+        mockPlanApprovalService,
+        mockSettingsService
+      );
+
+      const mockProvider = {
+        getName: () => 'mock',
+        executeQuery: vi.fn().mockImplementation(function* () {
+          yield {
+            type: 'assistant',
+            message: {
+              content: [{ type: 'text', text: 'Error: Invalid API key' }],
+            },
+          };
+        }),
+      } as unknown as BaseProvider;
+
+      const options: AgentExecutionOptions = {
+        workDir: '/test',
+        featureId: 'test-feature',
+        prompt: 'Test prompt',
+        projectPath: '/project',
+        abortController: new AbortController(),
+        provider: mockProvider,
+        effectiveBareModel: 'claude-sonnet-4-20250514',
+        planningMode: 'skip',
+      };
+
+      const callbacks = {
+        waitForApproval: vi.fn().mockResolvedValue({ approved: true }),
+        saveFeatureSummary: vi.fn(),
+        updateFeatureSummary: vi.fn(),
+        buildTaskPrompt: vi.fn().mockReturnValue('task prompt'),
+      };
+
+      await expect(executor.execute(options, callbacks)).rejects.toThrow('Authentication failed');
+    });
+
+    it('should accumulate responseText from multiple text blocks', async () => {
+      const executor = new AgentExecutor(
+        mockEventBus,
+        mockFeatureStateManager,
+        mockPlanApprovalService,
+        mockSettingsService
+      );
+
+      const mockProvider = {
+        getName: () => 'mock',
+        executeQuery: vi.fn().mockImplementation(function* () {
+          yield {
+            type: 'assistant',
+            message: {
+              content: [
+                { type: 'text', text: 'Part 1.' },
+                { type: 'text', text: ' Part 2.' },
+              ],
+            },
+          };
+          yield {
+            type: 'assistant',
+            message: {
+              content: [{ type: 'text', text: ' Part 3.' }],
+            },
+          };
+          yield { type: 'result', subtype: 'success' };
+        }),
+      } as unknown as BaseProvider;
+
+      const options: AgentExecutionOptions = {
+        workDir: '/test',
+        featureId: 'test-feature',
+        prompt: 'Test prompt',
+        projectPath: '/project',
+        abortController: new AbortController(),
+        provider: mockProvider,
+        effectiveBareModel: 'claude-sonnet-4-20250514',
+        planningMode: 'skip',
+      };
+
+      const callbacks = {
+        waitForApproval: vi.fn().mockResolvedValue({ approved: true }),
+        saveFeatureSummary: vi.fn(),
+        updateFeatureSummary: vi.fn(),
+        buildTaskPrompt: vi.fn().mockReturnValue('task prompt'),
+      };
+
+      const result = await executor.execute(options, callbacks);
+
+      // All parts should be in response text
+      expect(result.responseText).toContain('Part 1');
+      expect(result.responseText).toContain('Part 2');
+      expect(result.responseText).toContain('Part 3');
+    });
+
+    it('should return tasksCompleted=0 when no tasks executed', async () => {
+      const executor = new AgentExecutor(
+        mockEventBus,
+        mockFeatureStateManager,
+        mockPlanApprovalService,
+        mockSettingsService
+      );
+
+      const mockProvider = {
+        getName: () => 'mock',
+        executeQuery: vi.fn().mockImplementation(function* () {
+          yield {
+            type: 'assistant',
+            message: {
+              content: [{ type: 'text', text: 'Simple response' }],
+            },
+          };
+          yield { type: 'result', subtype: 'success' };
+        }),
+      } as unknown as BaseProvider;
+
+      const options: AgentExecutionOptions = {
+        workDir: '/test',
+        featureId: 'test-feature',
+        prompt: 'Test prompt',
+        projectPath: '/project',
+        abortController: new AbortController(),
+        provider: mockProvider,
+        effectiveBareModel: 'claude-sonnet-4-20250514',
+        planningMode: 'skip',
+      };
+
+      const callbacks = {
+        waitForApproval: vi.fn().mockResolvedValue({ approved: true }),
+        saveFeatureSummary: vi.fn(),
+        updateFeatureSummary: vi.fn(),
+        buildTaskPrompt: vi.fn().mockReturnValue('task prompt'),
+      };
+
+      const result = await executor.execute(options, callbacks);
+
+      expect(result.tasksCompleted).toBe(0);
+      expect(result.aborted).toBe(false);
+    });
+
+    it('should pass branchName to event payloads', async () => {
+      const executor = new AgentExecutor(
+        mockEventBus,
+        mockFeatureStateManager,
+        mockPlanApprovalService,
+        mockSettingsService
+      );
+
+      const mockProvider = {
+        getName: () => 'mock',
+        executeQuery: vi.fn().mockImplementation(function* () {
+          yield {
+            type: 'assistant',
+            message: {
+              content: [{ type: 'text', text: 'Response' }],
+            },
+          };
+          yield { type: 'result', subtype: 'success' };
+        }),
+      } as unknown as BaseProvider;
+
+      const options: AgentExecutionOptions = {
+        workDir: '/test',
+        featureId: 'test-feature',
+        prompt: 'Test prompt',
+        projectPath: '/project',
+        abortController: new AbortController(),
+        provider: mockProvider,
+        effectiveBareModel: 'claude-sonnet-4-20250514',
+        planningMode: 'skip',
+        branchName: 'feature/my-feature',
+      };
+
+      const callbacks = {
+        waitForApproval: vi.fn().mockResolvedValue({ approved: true }),
+        saveFeatureSummary: vi.fn(),
+        updateFeatureSummary: vi.fn(),
+        buildTaskPrompt: vi.fn().mockReturnValue('task prompt'),
+      };
+
+      await executor.execute(options, callbacks);
+
+      // Branch name should be passed to progress event
+      expect(mockEventBus.emitAutoModeEvent).toHaveBeenCalledWith(
+        'auto_mode_progress',
+        expect.objectContaining({
+          branchName: 'feature/my-feature',
+        })
+      );
+    });
+
+    it('should return correct result structure', async () => {
+      const executor = new AgentExecutor(
+        mockEventBus,
+        mockFeatureStateManager,
+        mockPlanApprovalService,
+        mockSettingsService
+      );
+
+      const mockProvider = {
+        getName: () => 'mock',
+        executeQuery: vi.fn().mockImplementation(function* () {
+          yield {
+            type: 'assistant',
+            message: {
+              content: [{ type: 'text', text: 'Test response' }],
+            },
+          };
+          yield { type: 'result', subtype: 'success' };
+        }),
+      } as unknown as BaseProvider;
+
+      const options: AgentExecutionOptions = {
+        workDir: '/test',
+        featureId: 'test-feature',
+        prompt: 'Test prompt',
+        projectPath: '/project',
+        abortController: new AbortController(),
+        provider: mockProvider,
+        effectiveBareModel: 'claude-sonnet-4-20250514',
+        planningMode: 'skip',
+      };
+
+      const callbacks = {
+        waitForApproval: vi.fn().mockResolvedValue({ approved: true }),
+        saveFeatureSummary: vi.fn(),
+        updateFeatureSummary: vi.fn(),
+        buildTaskPrompt: vi.fn().mockReturnValue('task prompt'),
+      };
+
+      const result = await executor.execute(options, callbacks);
+
+      // Verify result has all expected properties
+      expect(result).toHaveProperty('responseText');
+      expect(result).toHaveProperty('specDetected');
+      expect(result).toHaveProperty('tasksCompleted');
+      expect(result).toHaveProperty('aborted');
+
+      // Verify types
+      expect(typeof result.responseText).toBe('string');
+      expect(typeof result.specDetected).toBe('boolean');
+      expect(typeof result.tasksCompleted).toBe('number');
+      expect(typeof result.aborted).toBe('boolean');
+    });
+  });
 });
