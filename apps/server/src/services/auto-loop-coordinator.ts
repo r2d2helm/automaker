@@ -484,8 +484,9 @@ export class AutoLoopCoordinator {
 
   /**
    * Resolve max concurrency from provided value, settings, or default
+   * @public Used by AutoModeService.checkWorktreeCapacity
    */
-  private async resolveMaxConcurrency(
+  async resolveMaxConcurrency(
     projectPath: string,
     branchName: string | null,
     provided?: number

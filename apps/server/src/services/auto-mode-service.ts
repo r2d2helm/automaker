@@ -414,223 +414,6 @@ export class AutoModeService {
   }
 
   /**
-   * Track a failure and check if we should pause due to consecutive failures.
-   * This handles cases where the SDK doesn't return useful error messages.
-   * @param projectPath - The project to track failure for
-   * @param errorInfo - Error information
-   */
-  private trackFailureAndCheckPauseForProject(
-    projectPath: string,
-    errorInfo: { type: string; message: string }
-  ): boolean {
-    const projectState = this.autoLoopsByProject.get(projectPath);
-    if (!projectState) {
-      // Fall back to legacy global tracking
-      return this.trackFailureAndCheckPause(errorInfo);
-    }
-
-    const now = Date.now();
-
-    // Add this failure
-    projectState.consecutiveFailures.push({ timestamp: now, error: errorInfo.message });
-
-    // Remove old failures outside the window
-    projectState.consecutiveFailures = projectState.consecutiveFailures.filter(
-      (f) => now - f.timestamp < FAILURE_WINDOW_MS
-    );
-
-    // Check if we've hit the threshold
-    if (projectState.consecutiveFailures.length >= CONSECUTIVE_FAILURE_THRESHOLD) {
-      return true; // Should pause
-    }
-
-    // Also immediately pause for known quota/rate limit errors
-    if (errorInfo.type === 'quota_exhausted' || errorInfo.type === 'rate_limit') {
-      return true;
-    }
-
-    return false;
-  }
-
-  /**
-   * Track a failure and check if we should pause due to consecutive failures (legacy global).
-   */
-  private trackFailureAndCheckPause(errorInfo: { type: string; message: string }): boolean {
-    const now = Date.now();
-
-    // Add this failure
-    this.consecutiveFailures.push({ timestamp: now, error: errorInfo.message });
-
-    // Remove old failures outside the window
-    this.consecutiveFailures = this.consecutiveFailures.filter(
-      (f) => now - f.timestamp < FAILURE_WINDOW_MS
-    );
-
-    // Check if we've hit the threshold
-    if (this.consecutiveFailures.length >= CONSECUTIVE_FAILURE_THRESHOLD) {
-      return true; // Should pause
-    }
-
-    // Also immediately pause for known quota/rate limit errors
-    if (errorInfo.type === 'quota_exhausted' || errorInfo.type === 'rate_limit') {
-      return true;
-    }
-
-    return false;
-  }
-
-  /**
-   * Signal that we should pause due to repeated failures or quota exhaustion.
-   * This will pause the auto loop for a specific project.
-   * @param projectPath - The project to pause
-   * @param errorInfo - Error information
-   */
-  private signalShouldPauseForProject(
-    projectPath: string,
-    errorInfo: { type: string; message: string }
-  ): void {
-    const projectState = this.autoLoopsByProject.get(projectPath);
-    if (!projectState) {
-      // Fall back to legacy global pause
-      this.signalShouldPause(errorInfo);
-      return;
-    }
-
-    if (projectState.pausedDueToFailures) {
-      return; // Already paused
-    }
-
-    projectState.pausedDueToFailures = true;
-    const failureCount = projectState.consecutiveFailures.length;
-    logger.info(
-      `Pausing auto loop for ${projectPath} after ${failureCount} consecutive failures. Last error: ${errorInfo.type}`
-    );
-
-    // Emit event to notify UI
-    this.eventBus.emitAutoModeEvent('auto_mode_paused_failures', {
-      message:
-        failureCount >= CONSECUTIVE_FAILURE_THRESHOLD
-          ? `Auto Mode paused: ${failureCount} consecutive failures detected. This may indicate a quota limit or API issue. Please check your usage and try again.`
-          : 'Auto Mode paused: Usage limit or API error detected. Please wait for your quota to reset or check your API configuration.',
-      errorType: errorInfo.type,
-      originalError: errorInfo.message,
-      failureCount,
-      projectPath,
-    });
-
-    // Stop the auto loop for this project
-    this.stopAutoLoopForProject(projectPath);
-  }
-
-  /**
-   * Signal that we should pause due to repeated failures or quota exhaustion (legacy global).
-   */
-  private signalShouldPause(errorInfo: { type: string; message: string }): void {
-    if (this.pausedDueToFailures) {
-      return; // Already paused
-    }
-
-    this.pausedDueToFailures = true;
-    const failureCount = this.consecutiveFailures.length;
-    logger.info(
-      `Pausing auto loop after ${failureCount} consecutive failures. Last error: ${errorInfo.type}`
-    );
-
-    // Emit event to notify UI
-    this.eventBus.emitAutoModeEvent('auto_mode_paused_failures', {
-      message:
-        failureCount >= CONSECUTIVE_FAILURE_THRESHOLD
-          ? `Auto Mode paused: ${failureCount} consecutive failures detected. This may indicate a quota limit or API issue. Please check your usage and try again.`
-          : 'Auto Mode paused: Usage limit or API error detected. Please wait for your quota to reset or check your API configuration.',
-      errorType: errorInfo.type,
-      originalError: errorInfo.message,
-      failureCount,
-      projectPath: this.config?.projectPath,
-    });
-
-    // Stop the auto loop
-    this.stopAutoLoop();
-  }
-
-  /**
-   * Reset failure tracking for a specific project
-   * @param projectPath - The project to reset failure tracking for
-   */
-  private resetFailureTrackingForProject(projectPath: string): void {
-    const projectState = this.autoLoopsByProject.get(projectPath);
-    if (projectState) {
-      projectState.consecutiveFailures = [];
-      projectState.pausedDueToFailures = false;
-    }
-  }
-
-  /**
-   * Reset failure tracking (called when user manually restarts auto mode) - legacy global
-   */
-  private resetFailureTracking(): void {
-    this.consecutiveFailures = [];
-    this.pausedDueToFailures = false;
-  }
-
-  /**
-   * Record a successful feature completion to reset consecutive failure count for a project
-   * @param projectPath - The project to record success for
-   */
-  private recordSuccessForProject(projectPath: string): void {
-    const projectState = this.autoLoopsByProject.get(projectPath);
-    if (projectState) {
-      projectState.consecutiveFailures = [];
-    }
-  }
-
-  /**
-   * Record a successful feature completion to reset consecutive failure count - legacy global
-   */
-  private recordSuccess(): void {
-    this.consecutiveFailures = [];
-  }
-
-  private async resolveMaxConcurrency(
-    projectPath: string,
-    branchName: string | null,
-    provided?: number
-  ): Promise<number> {
-    if (typeof provided === 'number' && Number.isFinite(provided)) {
-      return provided;
-    }
-
-    if (!this.settingsService) {
-      return DEFAULT_MAX_CONCURRENCY;
-    }
-
-    try {
-      const settings = await this.settingsService.getGlobalSettings();
-      const globalMax =
-        typeof settings.maxConcurrency === 'number'
-          ? settings.maxConcurrency
-          : DEFAULT_MAX_CONCURRENCY;
-      const projectId = settings.projects?.find((project) => project.path === projectPath)?.id;
-      const autoModeByWorktree = settings.autoModeByWorktree;
-
-      if (projectId && autoModeByWorktree && typeof autoModeByWorktree === 'object') {
-        // Normalize branch name to match UI convention:
-        // - null or "main" -> "__main__" (UI treats "main" as the main worktree)
-        // This ensures consistency with how the UI stores worktree settings
-        const normalizedBranch = branchName === 'main' ? null : branchName;
-        const key = `${projectId}::${normalizedBranch ?? '__main__'}`;
-        const entry = autoModeByWorktree[key];
-        if (entry && typeof entry.maxConcurrency === 'number') {
-          return entry.maxConcurrency;
-        }
-      }
-
-      return globalMax;
-    } catch {
-      return DEFAULT_MAX_CONCURRENCY;
-    }
-  }
-
-  /**
    * Start the auto mode loop for a specific project/worktree (supports multiple concurrent projects and worktrees)
    * @param projectPath - The project to start auto mode for
    * @param branchName - The branch name for worktree scoping, null for main worktree
@@ -641,203 +424,11 @@ export class AutoModeService {
     branchName: string | null = null,
     maxConcurrency?: number
   ): Promise<number> {
-    const resolvedMaxConcurrency = await this.resolveMaxConcurrency(
+    return this.autoLoopCoordinator.startAutoLoopForProject(
       projectPath,
       branchName,
       maxConcurrency
     );
-
-    // Use worktree-scoped key
-    const worktreeKey = getWorktreeAutoLoopKey(projectPath, branchName);
-
-    // Check if this project/worktree already has an active autoloop
-    const existingState = this.autoLoopsByProject.get(worktreeKey);
-    if (existingState?.isRunning) {
-      const worktreeDesc = branchName ? `worktree ${branchName}` : 'main worktree';
-      throw new Error(
-        `Auto mode is already running for ${worktreeDesc} in project: ${projectPath}`
-      );
-    }
-
-    // Create new project/worktree autoloop state
-    const abortController = new AbortController();
-    const config: AutoModeConfig = {
-      maxConcurrency: resolvedMaxConcurrency,
-      useWorktrees: true,
-      projectPath,
-      branchName,
-    };
-
-    const projectState: ProjectAutoLoopState = {
-      abortController,
-      config,
-      isRunning: true,
-      consecutiveFailures: [],
-      pausedDueToFailures: false,
-      hasEmittedIdleEvent: false,
-      branchName,
-    };
-
-    this.autoLoopsByProject.set(worktreeKey, projectState);
-
-    const worktreeDesc = branchName ? `worktree ${branchName}` : 'main worktree';
-    logger.info(
-      `Starting auto loop for ${worktreeDesc} in project: ${projectPath} with maxConcurrency: ${resolvedMaxConcurrency}`
-    );
-
-    // Reset any features that were stuck in transient states due to previous server crash
-    try {
-      await this.resetStuckFeatures(projectPath);
-    } catch (error) {
-      logger.warn(`[startAutoLoopForProject] Error resetting stuck features:`, error);
-      // Don't fail startup due to reset errors
-    }
-
-    this.eventBus.emitAutoModeEvent('auto_mode_started', {
-      message: `Auto mode started with max ${resolvedMaxConcurrency} concurrent features`,
-      projectPath,
-      branchName,
-      maxConcurrency: resolvedMaxConcurrency,
-    });
-
-    // Save execution state for recovery after restart
-    await this.saveExecutionStateForProject(projectPath, branchName, resolvedMaxConcurrency);
-
-    // Run the loop in the background
-    this.runAutoLoopForProject(worktreeKey).catch((error) => {
-      const worktreeDescErr = branchName ? `worktree ${branchName}` : 'main worktree';
-      logger.error(`Loop error for ${worktreeDescErr} in ${projectPath}:`, error);
-      const errorInfo = classifyError(error);
-      this.eventBus.emitAutoModeEvent('auto_mode_error', {
-        error: errorInfo.message,
-        errorType: errorInfo.type,
-        projectPath,
-        branchName,
-      });
-    });
-
-    return resolvedMaxConcurrency;
-  }
-
-  /**
-   * Run the auto loop for a specific project/worktree
-   * @param worktreeKey - The worktree key (projectPath::branchName or projectPath::__main__)
-   */
-  private async runAutoLoopForProject(worktreeKey: string): Promise<void> {
-    const projectState = this.autoLoopsByProject.get(worktreeKey);
-    if (!projectState) {
-      logger.warn(`No project state found for ${worktreeKey}, stopping loop`);
-      return;
-    }
-
-    const { projectPath, branchName } = projectState.config;
-    const worktreeDesc = branchName ? `worktree ${branchName}` : 'main worktree';
-
-    logger.info(
-      `[AutoLoop] Starting loop for ${worktreeDesc} in ${projectPath}, maxConcurrency: ${projectState.config.maxConcurrency}`
-    );
-    let iterationCount = 0;
-
-    while (projectState.isRunning && !projectState.abortController.signal.aborted) {
-      iterationCount++;
-      try {
-        // Count running features for THIS project/worktree only
-        const projectRunningCount = await this.getRunningCountForWorktree(projectPath, branchName);
-
-        // Check if we have capacity for this project/worktree
-        if (projectRunningCount >= projectState.config.maxConcurrency) {
-          logger.debug(
-            `[AutoLoop] At capacity (${projectRunningCount}/${projectState.config.maxConcurrency}), waiting...`
-          );
-          await this.sleep(5000);
-          continue;
-        }
-
-        // Load pending features for this project/worktree
-        const pendingFeatures = await this.loadPendingFeatures(projectPath, branchName);
-
-        logger.info(
-          `[AutoLoop] Iteration ${iterationCount}: Found ${pendingFeatures.length} pending features, ${projectRunningCount}/${projectState.config.maxConcurrency} running for ${worktreeDesc}`
-        );
-
-        if (pendingFeatures.length === 0) {
-          // Emit idle event only once when backlog is empty AND no features are running
-          if (projectRunningCount === 0 && !projectState.hasEmittedIdleEvent) {
-            this.eventBus.emitAutoModeEvent('auto_mode_idle', {
-              message: 'No pending features - auto mode idle',
-              projectPath,
-              branchName,
-            });
-            projectState.hasEmittedIdleEvent = true;
-            logger.info(`[AutoLoop] Backlog complete, auto mode now idle for ${worktreeDesc}`);
-          } else if (projectRunningCount > 0) {
-            logger.info(
-              `[AutoLoop] No pending features available, ${projectRunningCount} still running, waiting...`
-            );
-          } else {
-            logger.warn(
-              `[AutoLoop] No pending features found for ${worktreeDesc} (branchName: ${branchName === null ? 'null (main)' : branchName}). Check server logs for filtering details.`
-            );
-          }
-          await this.sleep(10000);
-          continue;
-        }
-
-        // Find a feature not currently running and not yet finished
-        const nextFeature = pendingFeatures.find(
-          (f) => !this.concurrencyManager.isRunning(f.id) && !this.isFeatureFinished(f)
-        );
-
-        if (nextFeature) {
-          logger.info(`[AutoLoop] Starting feature ${nextFeature.id}: ${nextFeature.title}`);
-          // Reset idle event flag since we're doing work again
-          projectState.hasEmittedIdleEvent = false;
-          // Start feature execution in background
-          this.executeFeature(
-            projectPath,
-            nextFeature.id,
-            projectState.config.useWorktrees,
-            true
-          ).catch((error) => {
-            logger.error(`Feature ${nextFeature.id} error:`, error);
-          });
-        } else {
-          logger.debug(`[AutoLoop] All pending features are already running`);
-        }
-
-        await this.sleep(2000);
-      } catch (error) {
-        logger.error(`[AutoLoop] Loop iteration error for ${projectPath}:`, error);
-        await this.sleep(5000);
-      }
-    }
-
-    // Mark as not running when loop exits
-    projectState.isRunning = false;
-    logger.info(
-      `[AutoLoop] Loop stopped for project: ${projectPath} after ${iterationCount} iterations`
-    );
-  }
-
-  /**
-   * Get count of running features for a specific project
-   * Delegates to ConcurrencyManager.
-   */
-  private getRunningCountForProject(projectPath: string): number {
-    return this.concurrencyManager.getRunningCount(projectPath);
-  }
-
-  /**
-   * Get count of running features for a specific worktree
-   * Delegates to ConcurrencyManager.
-   * @param projectPath - The project path
-   * @param branchName - The branch name, or null for main worktree (features without branchName or matching primary branch)
-   */
-  private async getRunningCountForWorktree(
-    projectPath: string,
-    branchName: string | null
-  ): Promise<number> {
-    return this.concurrencyManager.getRunningCountForWorktree(projectPath, branchName);
   }
 
   /**
@@ -849,34 +440,7 @@ export class AutoModeService {
     projectPath: string,
     branchName: string | null = null
   ): Promise<number> {
-    const worktreeKey = getWorktreeAutoLoopKey(projectPath, branchName);
-    const projectState = this.autoLoopsByProject.get(worktreeKey);
-    if (!projectState) {
-      const worktreeDesc = branchName ? `worktree ${branchName}` : 'main worktree';
-      logger.warn(`No auto loop running for ${worktreeDesc} in project: ${projectPath}`);
-      return 0;
-    }
-
-    const wasRunning = projectState.isRunning;
-    projectState.isRunning = false;
-    projectState.abortController.abort();
-
-    // Clear execution state when auto-loop is explicitly stopped
-    await this.clearExecutionState(projectPath, branchName);
-
-    // Emit stop event
-    if (wasRunning) {
-      this.eventBus.emitAutoModeEvent('auto_mode_stopped', {
-        message: 'Auto mode stopped',
-        projectPath,
-        branchName,
-      });
-    }
-
-    // Remove from map
-    this.autoLoopsByProject.delete(worktreeKey);
-
-    return await this.getRunningCountForWorktree(projectPath, branchName);
+    return this.autoLoopCoordinator.stopAutoLoopForProject(projectPath, branchName);
   }
 
   /**
@@ -885,9 +449,7 @@ export class AutoModeService {
    * @param branchName - The branch name, or null for main worktree
    */
   isAutoLoopRunningForProject(projectPath: string, branchName: string | null = null): boolean {
-    const worktreeKey = getWorktreeAutoLoopKey(projectPath, branchName);
-    const projectState = this.autoLoopsByProject.get(worktreeKey);
-    return projectState?.isRunning ?? false;
+    return this.autoLoopCoordinator.isAutoLoopRunningForProject(projectPath, branchName);
   }
 
   /**
@@ -899,9 +461,7 @@ export class AutoModeService {
     projectPath: string,
     branchName: string | null = null
   ): AutoModeConfig | null {
-    const worktreeKey = getWorktreeAutoLoopKey(projectPath, branchName);
-    const projectState = this.autoLoopsByProject.get(worktreeKey);
-    return projectState?.config ?? null;
+    return this.autoLoopCoordinator.getAutoLoopConfigForProject(projectPath, branchName);
   }
 
   /**
@@ -951,15 +511,9 @@ export class AutoModeService {
     projectPath: string,
     maxConcurrency = DEFAULT_MAX_CONCURRENCY
   ): Promise<void> {
-    // For backward compatibility, delegate to the new per-project method
-    // But also maintain legacy state for existing code that might check it
-    if (this.autoLoopRunning) {
-      throw new Error('Auto mode is already running');
-    }
-
-    // Reset failure tracking when user manually starts auto mode
-    this.resetFailureTracking();
-
+    // Delegate to the new per-project method
+    await this.startAutoLoopForProject(projectPath, null, maxConcurrency);
+    // Maintain legacy state for existing code that might check it
     this.autoLoopRunning = true;
     this.autoLoopAbortController = new AbortController();
     this.config = {
@@ -968,27 +522,6 @@ export class AutoModeService {
       projectPath,
       branchName: null,
     };
-
-    this.eventBus.emitAutoModeEvent('auto_mode_started', {
-      message: `Auto mode started with max ${maxConcurrency} concurrent features`,
-      projectPath,
-    });
-
-    // Save execution state for recovery after restart
-    await this.saveExecutionState(projectPath);
-
-    // Note: Memory folder initialization is now handled by loadContextFiles
-
-    // Run the loop in the background
-    this.runAutoLoop().catch((error) => {
-      logger.error('Loop error:', error);
-      const errorInfo = classifyError(error);
-      this.eventBus.emitAutoModeEvent('auto_mode_error', {
-        error: errorInfo.message,
-        errorType: errorInfo.type,
-        projectPath,
-      });
-    });
   }
 
   /**
@@ -1111,11 +644,14 @@ export class AutoModeService {
     // Normalize "main" to null to match UI convention for main worktree
     const branchName = rawBranchName === 'main' ? null : rawBranchName;
 
-    // Get per-worktree limit
-    const maxAgents = await this.resolveMaxConcurrency(projectPath, branchName);
+    // Get per-worktree limit from AutoLoopCoordinator
+    const maxAgents = await this.autoLoopCoordinator.resolveMaxConcurrency(projectPath, branchName);
 
     // Get current running count for this worktree
-    const currentAgents = await this.getRunningCountForWorktree(projectPath, branchName);
+    const currentAgents = await this.concurrencyManager.getRunningCountForWorktree(
+      projectPath,
+      branchName
+    );
 
     return {
       hasCapacity: currentAgents < maxAgents,
@@ -1372,9 +908,6 @@ export class AutoModeService {
       const finalStatus = feature.skipTests ? 'waiting_approval' : 'verified';
       await this.updateFeatureStatus(projectPath, featureId, finalStatus);
 
-      // Record success to reset consecutive failure tracking
-      this.recordSuccess();
-
       // Record learnings, memory usage, and extract summary after successful feature completion
       try {
         const featureDir = getFeatureDir(projectPath, featureId);
@@ -1450,20 +983,8 @@ export class AutoModeService {
           projectPath,
         });
 
-        // Track this failure and check if we should pause auto mode
-        // This handles both specific quota/rate limit errors AND generic failures
-        // that may indicate quota exhaustion (SDK doesn't always return useful errors)
-        const shouldPause = this.trackFailureAndCheckPause({
-          type: errorInfo.type,
-          message: errorInfo.message,
-        });
-
-        if (shouldPause) {
-          this.signalShouldPause({
-            type: errorInfo.type,
-            message: errorInfo.message,
-          });
-        }
+        // Note: Failure tracking is now handled by AutoLoopCoordinator for auto-mode
+        // features. Manual feature execution doesn't trigger pause logic.
       }
     } finally {
       logger.info(`Feature ${featureId} execution ended, cleaning up runningFeatures`);
@@ -1517,107 +1038,12 @@ export class AutoModeService {
     /** Internal flag: set to true when called from a method that already tracks the feature */
     _calledInternally = false
   ): Promise<void> {
-    // Idempotent check: if feature is already being resumed/running, skip silently
-    // This prevents race conditions when multiple callers try to resume the same feature
-    if (!_calledInternally && this.isFeatureRunning(featureId)) {
-      logger.info(
-        `[AutoMode] Feature ${featureId} is already being resumed/running, skipping duplicate resume request`
-      );
-      return;
-    }
-
-    this.acquireRunningFeature({
-      featureId,
+    return this.recoveryService.resumeFeature(
       projectPath,
-      isAutoMode: false,
-      allowReuse: _calledInternally,
-    });
-
-    try {
-      // Load feature to check status
-      const feature = await this.loadFeature(projectPath, featureId);
-      if (!feature) {
-        throw new Error(`Feature ${featureId} not found`);
-      }
-
-      logger.info(
-        `[AutoMode] Resuming feature ${featureId} (${feature.title}) - current status: ${feature.status}`
-      );
-
-      // Check if feature is stuck in a pipeline step via PipelineOrchestrator
-      const pipelineInfo = await this.pipelineOrchestrator.detectPipelineStatus(
-        projectPath,
-        featureId,
-        (feature.status || '') as FeatureStatusWithPipeline
-      );
-
-      if (pipelineInfo.isPipeline) {
-        // Feature stuck in pipeline - use pipeline resume via PipelineOrchestrator
-        logger.info(
-          `[AutoMode] Feature ${featureId} is in pipeline step ${pipelineInfo.stepId}, using pipeline resume`
-        );
-        return await this.pipelineOrchestrator.resumePipeline(
-          projectPath,
-          feature,
-          useWorktrees,
-          pipelineInfo
-        );
-      }
-
-      // Normal resume flow for non-pipeline features
-      // Check if context exists in .automaker directory
-      const featureDir = getFeatureDir(projectPath, featureId);
-      const contextPath = path.join(featureDir, 'agent-output.md');
-
-      let hasContext = false;
-      try {
-        await secureFs.access(contextPath);
-        hasContext = true;
-      } catch {
-        // No context - feature was interrupted before any agent output was saved
-      }
-
-      if (hasContext) {
-        // Load previous context and continue
-        // executeFeatureWithContext -> executeFeature will see feature is already tracked
-        const context = (await secureFs.readFile(contextPath, 'utf-8')) as string;
-        logger.info(
-          `[AutoMode] Resuming feature ${featureId} with saved context (${context.length} chars)`
-        );
-
-        // Emit event for UI notification
-        this.eventBus.emitAutoModeEvent('auto_mode_feature_resuming', {
-          featureId,
-          featureName: feature.title,
-          projectPath,
-          hasContext: true,
-          message: `Resuming feature "${feature.title}" from saved context`,
-        });
-
-        return await this.executeFeatureWithContext(projectPath, featureId, context, useWorktrees);
-      }
-
-      // No context - feature was interrupted before any agent output was saved
-      // Start fresh execution instead of leaving the feature stuck
-      logger.info(
-        `[AutoMode] Feature ${featureId} has no saved context - starting fresh execution`
-      );
-
-      // Emit event for UI notification
-      this.eventBus.emitAutoModeEvent('auto_mode_feature_resuming', {
-        featureId,
-        featureName: feature.title,
-        projectPath,
-        hasContext: false,
-        message: `Starting fresh execution for interrupted feature "${feature.title}" (no previous context found)`,
-      });
-
-      return await this.executeFeature(projectPath, featureId, useWorktrees, false, undefined, {
-        _calledInternally: true,
-      });
-    } finally {
-      this.releaseRunningFeature(featureId);
-    }
+      featureId,
+      useWorktrees,
+      _calledInternally
+    );
   }
 
   /**
@@ -1832,9 +1258,6 @@ Address the follow-up instructions above. Review the previous work and make the 
       const finalStatus = feature?.skipTests ? 'waiting_approval' : 'verified';
       await this.updateFeatureStatus(projectPath, featureId, finalStatus);
 
-      // Record success to reset consecutive failure tracking
-      this.recordSuccess();
-
       this.eventBus.emitAutoModeEvent('auto_mode_feature_complete', {
         featureId,
         featureName: feature?.title,
@@ -1856,19 +1279,8 @@ Address the follow-up instructions above. Review the previous work and make the 
           errorType: errorInfo.type,
           projectPath,
         });
-
-        // Track this failure and check if we should pause auto mode
-        const shouldPause = this.trackFailureAndCheckPause({
-          type: errorInfo.type,
-          message: errorInfo.message,
-        });
-
-        if (shouldPause) {
-          this.signalShouldPause({
-            type: errorInfo.type,
-            message: errorInfo.message,
-          });
-        }
+        // Note: Follow-ups are manual operations, not part of auto-loop
+        // Failure tracking is handled by AutoLoopCoordinator for auto-mode
       }
     } finally {
       this.releaseRunningFeature(featureId);
@@ -3312,118 +2724,7 @@ This mock response was generated because AUTOMAKER_MOCK_AGENT=true was set.
    * This should be called during server initialization
    */
   async resumeInterruptedFeatures(projectPath: string): Promise<void> {
-    logger.info('Checking for interrupted features to resume...');
-
-    // Load all features and find those that were interrupted
-    const featuresDir = getFeaturesDir(projectPath);
-
-    try {
-      const entries = await secureFs.readdir(featuresDir, { withFileTypes: true });
-      // Track features with and without context separately for better logging
-      const featuresWithContext: Feature[] = [];
-      const featuresWithoutContext: Feature[] = [];
-
-      for (const entry of entries) {
-        if (entry.isDirectory()) {
-          const featurePath = path.join(featuresDir, entry.name, 'feature.json');
-
-          // Use recovery-enabled read for corrupted file handling
-          const result = await readJsonWithRecovery<Feature | null>(featurePath, null, {
-            maxBackups: DEFAULT_BACKUP_COUNT,
-            autoRestore: true,
-          });
-
-          logRecoveryWarning(result, `Feature ${entry.name}`, logger);
-
-          const feature = result.data;
-          if (!feature) {
-            // Skip features that couldn't be loaded or recovered
-            continue;
-          }
-
-          // Check if feature was interrupted (in_progress or pipeline_*)
-          if (
-            feature.status === 'in_progress' ||
-            (feature.status && feature.status.startsWith('pipeline_'))
-          ) {
-            // Check if context (agent-output.md) exists
-            const featureDir = getFeatureDir(projectPath, feature.id);
-            const contextPath = path.join(featureDir, 'agent-output.md');
-            try {
-              await secureFs.access(contextPath);
-              featuresWithContext.push(feature);
-              logger.info(
-                `Found interrupted feature with context: ${feature.id} (${feature.title}) - status: ${feature.status}`
-              );
-            } catch {
-              // No context file - feature was interrupted before any agent output
-              // Still include it for resumption (will start fresh)
-              featuresWithoutContext.push(feature);
-              logger.info(
-                `Found interrupted feature without context: ${feature.id} (${feature.title}) - status: ${feature.status} (will restart fresh)`
-              );
-            }
-          }
-        }
-      }
-
-      // Combine all interrupted features (with and without context)
-      const allInterruptedFeatures = [...featuresWithContext, ...featuresWithoutContext];
-
-      if (allInterruptedFeatures.length === 0) {
-        logger.info('No interrupted features found');
-        return;
-      }
-
-      logger.info(
-        `Found ${allInterruptedFeatures.length} interrupted feature(s) to resume ` +
-          `(${featuresWithContext.length} with context, ${featuresWithoutContext.length} without context)`
-      );
-
-      // Emit event to notify UI with context information
-      this.eventBus.emitAutoModeEvent('auto_mode_resuming_features', {
-        message: `Resuming ${allInterruptedFeatures.length} interrupted feature(s) after server restart`,
-        projectPath,
-        featureIds: allInterruptedFeatures.map((f) => f.id),
-        features: allInterruptedFeatures.map((f) => ({
-          id: f.id,
-          title: f.title,
-          status: f.status,
-          branchName: f.branchName ?? null,
-          hasContext: featuresWithContext.some((fc) => fc.id === f.id),
-        })),
-      });
-
-      // Resume each interrupted feature
-      for (const feature of allInterruptedFeatures) {
-        try {
-          // Idempotent check: skip if feature is already being resumed (prevents race conditions)
-          if (this.isFeatureRunning(feature.id)) {
-            logger.info(
-              `Feature ${feature.id} (${feature.title}) is already being resumed, skipping`
-            );
-            continue;
-          }
-
-          const hasContext = featuresWithContext.some((fc) => fc.id === feature.id);
-          logger.info(
-            `Resuming feature: ${feature.id} (${feature.title}) - ${hasContext ? 'continuing from context' : 'starting fresh'}`
-          );
-          // Use resumeFeature which will detect the existing context and continue,
-          // or start fresh if no context exists
-          await this.resumeFeature(projectPath, feature.id, true);
-        } catch (error) {
-          logger.error(`Failed to resume feature ${feature.id}:`, error);
-          // Continue with other features
-        }
-      }
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
-        logger.info('No features directory found, nothing to resume');
-      } else {
-        logger.error('Error checking for interrupted features:', error);
-      }
-    }
+    return this.recoveryService.resumeInterruptedFeatures(projectPath);
   }
 
   /**
