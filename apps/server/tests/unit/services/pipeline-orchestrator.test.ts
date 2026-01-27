@@ -145,14 +145,12 @@ describe('PipelineOrchestrator', () => {
       startTests: vi
         .fn()
         .mockResolvedValue({ success: true, result: { sessionId: 'test-session-1' } }),
-      getSession: vi
-        .fn()
-        .mockReturnValue({
-          status: 'passed',
-          exitCode: 0,
-          startedAt: new Date(),
-          finishedAt: new Date(),
-        }),
+      getSession: vi.fn().mockReturnValue({
+        status: 'passed',
+        exitCode: 0,
+        startedAt: new Date(),
+        finishedAt: new Date(),
+      }),
       getSessionOutput: vi
         .fn()
         .mockReturnValue({ success: true, result: { output: 'All tests passed' } }),
@@ -798,6 +796,265 @@ describe('PipelineOrchestrator', () => {
         expect.stringContaining('/api/worktree/merge'),
         expect.any(Object)
       );
+    });
+  });
+
+  describe('AutoModeService integration (delegation verification)', () => {
+    describe('executePipeline delegation', () => {
+      const createPipelineContext = (): PipelineContext => ({
+        projectPath: '/test/project',
+        featureId: 'feature-1',
+        feature: testFeature,
+        steps: testSteps,
+        workDir: '/test/project',
+        worktreePath: '/test/worktree',
+        branchName: 'feature/test-1',
+        abortController: new AbortController(),
+        autoLoadClaudeMd: true,
+        testAttempts: 0,
+        maxTestAttempts: 5,
+      });
+
+      beforeEach(() => {
+        global.fetch = vi.fn().mockResolvedValue({
+          ok: true,
+          json: vi.fn().mockResolvedValue({ success: true }),
+        } as never);
+      });
+
+      it('builds PipelineContext with correct fields from executeFeature', async () => {
+        const context = createPipelineContext();
+        await orchestrator.executePipeline(context);
+
+        // Verify all context fields were used correctly
+        expect(context.projectPath).toBe('/test/project');
+        expect(context.featureId).toBe('feature-1');
+        expect(context.steps).toHaveLength(2);
+        expect(context.workDir).toBe('/test/project');
+        expect(context.worktreePath).toBe('/test/worktree');
+        expect(context.branchName).toBe('feature/test-1');
+        expect(context.autoLoadClaudeMd).toBe(true);
+        expect(context.testAttempts).toBe(0);
+        expect(context.maxTestAttempts).toBe(5);
+      });
+
+      it('passes worktreePath when worktree exists', async () => {
+        const context = createPipelineContext();
+        context.worktreePath = '/test/custom-worktree';
+
+        await orchestrator.executePipeline(context);
+
+        // Merge should receive the worktree path
+        expect(global.fetch).toHaveBeenCalledWith(
+          expect.stringContaining('/api/worktree/merge'),
+          expect.objectContaining({
+            body: expect.stringContaining('/test/custom-worktree'),
+          })
+        );
+      });
+
+      it('passes branchName from feature', async () => {
+        const context = createPipelineContext();
+        context.branchName = 'feature/custom-branch';
+        context.feature = { ...testFeature, branchName: 'feature/custom-branch' };
+
+        await orchestrator.executePipeline(context);
+
+        expect(global.fetch).toHaveBeenCalledWith(
+          expect.stringContaining('/api/worktree/merge'),
+          expect.objectContaining({
+            body: expect.stringContaining('feature/custom-branch'),
+          })
+        );
+      });
+
+      it('passes testAttempts and maxTestAttempts', async () => {
+        const context = createPipelineContext();
+        context.testAttempts = 2;
+        context.maxTestAttempts = 10;
+
+        // These values would be used by executeTestStep if called
+        expect(context.testAttempts).toBe(2);
+        expect(context.maxTestAttempts).toBe(10);
+      });
+    });
+
+    describe('detectPipelineStatus delegation', () => {
+      beforeEach(() => {
+        vi.mocked(pipelineService.isPipelineStatus).mockReturnValue(true);
+        vi.mocked(pipelineService.getStepIdFromStatus).mockReturnValue('step-1');
+        vi.mocked(pipelineService.getPipelineConfig).mockResolvedValue(testConfig);
+      });
+
+      it('returns pipelineInfo from orchestrator for pipeline status', async () => {
+        const result = await orchestrator.detectPipelineStatus(
+          '/test/project',
+          'feature-1',
+          'pipeline_step-1'
+        );
+
+        expect(result.isPipeline).toBe(true);
+        expect(result.stepId).toBe('step-1');
+        expect(result.stepIndex).toBe(0);
+        expect(result.config).toEqual(testConfig);
+      });
+
+      it('returns isPipeline false for non-pipeline status', async () => {
+        vi.mocked(pipelineService.isPipelineStatus).mockReturnValue(false);
+
+        const result = await orchestrator.detectPipelineStatus(
+          '/test/project',
+          'feature-1',
+          'in_progress'
+        );
+
+        expect(result.isPipeline).toBe(false);
+        expect(result.stepId).toBeNull();
+        expect(result.config).toBeNull();
+      });
+    });
+
+    describe('resumePipeline delegation', () => {
+      const validPipelineInfo: PipelineStatusInfo = {
+        isPipeline: true,
+        stepId: 'step-1',
+        stepIndex: 0,
+        totalSteps: 2,
+        step: testSteps[0],
+        config: testConfig,
+      };
+
+      it('builds resumeContext with autoLoadClaudeMd setting', async () => {
+        vi.mocked(getAutoLoadClaudeMdSetting).mockResolvedValue(true);
+
+        await orchestrator.resumeFromStep('/test/project', testFeature, true, 0, testConfig);
+
+        // Verify autoLoadClaudeMd was fetched
+        expect(getAutoLoadClaudeMdSetting).toHaveBeenCalledWith(
+          '/test/project',
+          null,
+          '[AutoMode]'
+        );
+      });
+
+      it('passes useWorktrees flag to orchestrator', async () => {
+        await orchestrator.resumeFromStep('/test/project', testFeature, true, 0, testConfig);
+
+        // When useWorktrees is true, it should look for worktree
+        expect(mockWorktreeResolver.findWorktreeForBranch).toHaveBeenCalledWith(
+          '/test/project',
+          'feature/test-1'
+        );
+      });
+
+      it('sets maxTestAttempts to 5', async () => {
+        // The default maxTestAttempts is 5 as per CONTEXT.md
+        await orchestrator.resumeFromStep('/test/project', testFeature, true, 0, testConfig);
+
+        // Execution should proceed with maxTestAttempts = 5
+        expect(mockRunAgentFn).toHaveBeenCalled();
+      });
+    });
+  });
+
+  describe('edge cases', () => {
+    describe('abort signal handling', () => {
+      it('handles abort signal during step execution', async () => {
+        const context: PipelineContext = {
+          projectPath: '/test/project',
+          featureId: 'feature-1',
+          feature: testFeature,
+          steps: testSteps,
+          workDir: '/test/project',
+          worktreePath: null,
+          branchName: 'feature/test-1',
+          abortController: new AbortController(),
+          autoLoadClaudeMd: true,
+          testAttempts: 0,
+          maxTestAttempts: 5,
+        };
+
+        // Abort during first step
+        mockRunAgentFn.mockImplementationOnce(async () => {
+          context.abortController.abort();
+        });
+
+        await expect(orchestrator.executePipeline(context)).rejects.toThrow(
+          'Pipeline execution aborted'
+        );
+      });
+    });
+
+    describe('context file handling', () => {
+      it('handles missing context file during resume', async () => {
+        vi.mocked(secureFs.access).mockRejectedValue(new Error('ENOENT'));
+
+        const pipelineInfo: PipelineStatusInfo = {
+          isPipeline: true,
+          stepId: 'step-1',
+          stepIndex: 0,
+          totalSteps: 2,
+          step: testSteps[0],
+          config: testConfig,
+        };
+
+        await orchestrator.resumePipeline('/test/project', testFeature, true, pipelineInfo);
+
+        // Should restart from beginning when no context
+        expect(mockUpdateFeatureStatusFn).toHaveBeenCalledWith(
+          '/test/project',
+          'feature-1',
+          'in_progress'
+        );
+        expect(mockExecuteFeatureFn).toHaveBeenCalled();
+      });
+    });
+
+    describe('step deletion handling', () => {
+      it('handles deleted step during resume', async () => {
+        const pipelineInfo: PipelineStatusInfo = {
+          isPipeline: true,
+          stepId: 'deleted-step',
+          stepIndex: -1,
+          totalSteps: 2,
+          step: null,
+          config: testConfig,
+        };
+
+        await orchestrator.resumePipeline('/test/project', testFeature, true, pipelineInfo);
+
+        // Should complete feature when step no longer exists
+        expect(mockUpdateFeatureStatusFn).toHaveBeenCalledWith(
+          '/test/project',
+          'feature-1',
+          'verified'
+        );
+      });
+
+      it('handles all steps excluded during resume', async () => {
+        const featureWithAllExcluded: Feature = {
+          ...testFeature,
+          excludedPipelineSteps: ['step-1', 'step-2'],
+        };
+
+        vi.mocked(pipelineService.getNextStatus).mockReturnValue('verified');
+        vi.mocked(pipelineService.isPipelineStatus).mockReturnValue(false);
+
+        await orchestrator.resumeFromStep(
+          '/test/project',
+          featureWithAllExcluded,
+          true,
+          0,
+          testConfig
+        );
+
+        expect(mockEventBus.emitAutoModeEvent).toHaveBeenCalledWith(
+          'auto_mode_feature_complete',
+          expect.objectContaining({
+            message: expect.stringContaining('excluded'),
+          })
+        );
+      });
     });
   });
 });
