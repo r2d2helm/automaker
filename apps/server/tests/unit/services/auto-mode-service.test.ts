@@ -474,105 +474,39 @@ describe('auto-mode-service.ts', () => {
   });
 
   describe('markFeatureInterrupted', () => {
-    // Helper to mock updateFeatureStatus
-    const mockUpdateFeatureStatus = (svc: AutoModeService, mockFn: ReturnType<typeof vi.fn>) => {
-      (svc as any).updateFeatureStatus = mockFn;
+    // Helper to mock featureStateManager.markFeatureInterrupted
+    const mockFeatureStateManagerMarkInterrupted = (
+      svc: AutoModeService,
+      mockFn: ReturnType<typeof vi.fn>
+    ) => {
+      (svc as any).featureStateManager.markFeatureInterrupted = mockFn;
     };
 
-    // Helper to mock loadFeature
-    const mockLoadFeature = (svc: AutoModeService, mockFn: ReturnType<typeof vi.fn>) => {
-      (svc as any).loadFeature = mockFn;
-    };
-
-    it('should call updateFeatureStatus with interrupted status for non-pipeline features', async () => {
-      const loadMock = vi.fn().mockResolvedValue({ id: 'feature-123', status: 'in_progress' });
-      const updateMock = vi.fn().mockResolvedValue(undefined);
-      mockLoadFeature(service, loadMock);
-      mockUpdateFeatureStatus(service, updateMock);
+    it('should delegate to featureStateManager.markFeatureInterrupted', async () => {
+      const markMock = vi.fn().mockResolvedValue(undefined);
+      mockFeatureStateManagerMarkInterrupted(service, markMock);
 
       await service.markFeatureInterrupted('/test/project', 'feature-123');
 
-      expect(updateMock).toHaveBeenCalledWith('/test/project', 'feature-123', 'interrupted');
+      expect(markMock).toHaveBeenCalledWith('/test/project', 'feature-123', undefined);
     });
 
-    it('should call updateFeatureStatus with reason when provided', async () => {
-      const loadMock = vi.fn().mockResolvedValue({ id: 'feature-123', status: 'in_progress' });
-      const updateMock = vi.fn().mockResolvedValue(undefined);
-      mockLoadFeature(service, loadMock);
-      mockUpdateFeatureStatus(service, updateMock);
+    it('should pass reason to featureStateManager.markFeatureInterrupted', async () => {
+      const markMock = vi.fn().mockResolvedValue(undefined);
+      mockFeatureStateManagerMarkInterrupted(service, markMock);
 
       await service.markFeatureInterrupted('/test/project', 'feature-123', 'server shutdown');
 
-      expect(updateMock).toHaveBeenCalledWith('/test/project', 'feature-123', 'interrupted');
+      expect(markMock).toHaveBeenCalledWith('/test/project', 'feature-123', 'server shutdown');
     });
 
-    it('should propagate errors from updateFeatureStatus', async () => {
-      const loadMock = vi.fn().mockResolvedValue({ id: 'feature-123', status: 'in_progress' });
-      const updateMock = vi.fn().mockRejectedValue(new Error('Update failed'));
-      mockLoadFeature(service, loadMock);
-      mockUpdateFeatureStatus(service, updateMock);
+    it('should propagate errors from featureStateManager', async () => {
+      const markMock = vi.fn().mockRejectedValue(new Error('Update failed'));
+      mockFeatureStateManagerMarkInterrupted(service, markMock);
 
       await expect(service.markFeatureInterrupted('/test/project', 'feature-123')).rejects.toThrow(
         'Update failed'
       );
-    });
-
-    it('should preserve pipeline_implementation status instead of marking as interrupted', async () => {
-      const loadMock = vi
-        .fn()
-        .mockResolvedValue({ id: 'feature-123', status: 'pipeline_implementation' });
-      const updateMock = vi.fn().mockResolvedValue(undefined);
-      mockLoadFeature(service, loadMock);
-      mockUpdateFeatureStatus(service, updateMock);
-
-      await service.markFeatureInterrupted('/test/project', 'feature-123', 'server shutdown');
-
-      // updateFeatureStatus should NOT be called for pipeline statuses
-      expect(updateMock).not.toHaveBeenCalled();
-    });
-
-    it('should preserve pipeline_testing status instead of marking as interrupted', async () => {
-      const loadMock = vi.fn().mockResolvedValue({ id: 'feature-123', status: 'pipeline_testing' });
-      const updateMock = vi.fn().mockResolvedValue(undefined);
-      mockLoadFeature(service, loadMock);
-      mockUpdateFeatureStatus(service, updateMock);
-
-      await service.markFeatureInterrupted('/test/project', 'feature-123');
-
-      expect(updateMock).not.toHaveBeenCalled();
-    });
-
-    it('should preserve pipeline_review status instead of marking as interrupted', async () => {
-      const loadMock = vi.fn().mockResolvedValue({ id: 'feature-123', status: 'pipeline_review' });
-      const updateMock = vi.fn().mockResolvedValue(undefined);
-      mockLoadFeature(service, loadMock);
-      mockUpdateFeatureStatus(service, updateMock);
-
-      await service.markFeatureInterrupted('/test/project', 'feature-123');
-
-      expect(updateMock).not.toHaveBeenCalled();
-    });
-
-    it('should mark feature as interrupted when loadFeature returns null', async () => {
-      const loadMock = vi.fn().mockResolvedValue(null);
-      const updateMock = vi.fn().mockResolvedValue(undefined);
-      mockLoadFeature(service, loadMock);
-      mockUpdateFeatureStatus(service, updateMock);
-
-      await service.markFeatureInterrupted('/test/project', 'feature-123');
-
-      expect(updateMock).toHaveBeenCalledWith('/test/project', 'feature-123', 'interrupted');
-    });
-
-    it('should mark feature as interrupted for pending status', async () => {
-      const loadMock = vi.fn().mockResolvedValue({ id: 'feature-123', status: 'pending' });
-      const updateMock = vi.fn().mockResolvedValue(undefined);
-      mockLoadFeature(service, loadMock);
-      mockUpdateFeatureStatus(service, updateMock);
-
-      await service.markFeatureInterrupted('/test/project', 'feature-123');
-
-      expect(updateMock).toHaveBeenCalledWith('/test/project', 'feature-123', 'interrupted');
     });
   });
 
@@ -588,23 +522,21 @@ describe('auto-mode-service.ts', () => {
       getConcurrencyManager(svc).acquire(feature);
     };
 
-    // Helper to mock updateFeatureStatus
-    const mockUpdateFeatureStatus = (svc: AutoModeService, mockFn: ReturnType<typeof vi.fn>) => {
-      (svc as any).updateFeatureStatus = mockFn;
-    };
-
-    // Helper to mock loadFeature
-    const mockLoadFeature = (svc: AutoModeService, mockFn: ReturnType<typeof vi.fn>) => {
-      (svc as any).loadFeature = mockFn;
+    // Helper to mock featureStateManager.markFeatureInterrupted
+    const mockFeatureStateManagerMarkInterrupted = (
+      svc: AutoModeService,
+      mockFn: ReturnType<typeof vi.fn>
+    ) => {
+      (svc as any).featureStateManager.markFeatureInterrupted = mockFn;
     };
 
     it('should do nothing when no features are running', async () => {
-      const updateMock = vi.fn().mockResolvedValue(undefined);
-      mockUpdateFeatureStatus(service, updateMock);
+      const markMock = vi.fn().mockResolvedValue(undefined);
+      mockFeatureStateManagerMarkInterrupted(service, markMock);
 
       await service.markAllRunningFeaturesInterrupted();
 
-      expect(updateMock).not.toHaveBeenCalled();
+      expect(markMock).not.toHaveBeenCalled();
     });
 
     it('should mark a single running feature as interrupted', async () => {
@@ -614,14 +546,12 @@ describe('auto-mode-service.ts', () => {
         isAutoMode: true,
       });
 
-      const loadMock = vi.fn().mockResolvedValue({ id: 'feature-1', status: 'in_progress' });
-      const updateMock = vi.fn().mockResolvedValue(undefined);
-      mockLoadFeature(service, loadMock);
-      mockUpdateFeatureStatus(service, updateMock);
+      const markMock = vi.fn().mockResolvedValue(undefined);
+      mockFeatureStateManagerMarkInterrupted(service, markMock);
 
       await service.markAllRunningFeaturesInterrupted();
 
-      expect(updateMock).toHaveBeenCalledWith('/project/path', 'feature-1', 'interrupted');
+      expect(markMock).toHaveBeenCalledWith('/project/path', 'feature-1', 'server shutdown');
     });
 
     it('should mark multiple running features as interrupted', async () => {
@@ -641,17 +571,15 @@ describe('auto-mode-service.ts', () => {
         isAutoMode: true,
       });
 
-      const loadMock = vi.fn().mockResolvedValue({ status: 'in_progress' });
-      const updateMock = vi.fn().mockResolvedValue(undefined);
-      mockLoadFeature(service, loadMock);
-      mockUpdateFeatureStatus(service, updateMock);
+      const markMock = vi.fn().mockResolvedValue(undefined);
+      mockFeatureStateManagerMarkInterrupted(service, markMock);
 
       await service.markAllRunningFeaturesInterrupted();
 
-      expect(updateMock).toHaveBeenCalledTimes(3);
-      expect(updateMock).toHaveBeenCalledWith('/project-a', 'feature-1', 'interrupted');
-      expect(updateMock).toHaveBeenCalledWith('/project-b', 'feature-2', 'interrupted');
-      expect(updateMock).toHaveBeenCalledWith('/project-a', 'feature-3', 'interrupted');
+      expect(markMock).toHaveBeenCalledTimes(3);
+      expect(markMock).toHaveBeenCalledWith('/project-a', 'feature-1', 'server shutdown');
+      expect(markMock).toHaveBeenCalledWith('/project-b', 'feature-2', 'server shutdown');
+      expect(markMock).toHaveBeenCalledWith('/project-a', 'feature-3', 'server shutdown');
     });
 
     it('should mark features in parallel', async () => {
@@ -663,20 +591,20 @@ describe('auto-mode-service.ts', () => {
         });
       }
 
-      const loadMock = vi.fn().mockResolvedValue({ status: 'in_progress' });
       const callOrder: string[] = [];
-      const updateMock = vi.fn().mockImplementation(async (_path: string, featureId: string) => {
-        callOrder.push(featureId);
-        await new Promise((resolve) => setTimeout(resolve, 10));
-      });
-      mockLoadFeature(service, loadMock);
-      mockUpdateFeatureStatus(service, updateMock);
+      const markMock = vi
+        .fn()
+        .mockImplementation(async (_path: string, featureId: string, _reason?: string) => {
+          callOrder.push(featureId);
+          await new Promise((resolve) => setTimeout(resolve, 10));
+        });
+      mockFeatureStateManagerMarkInterrupted(service, markMock);
 
       const startTime = Date.now();
       await service.markAllRunningFeaturesInterrupted();
       const duration = Date.now() - startTime;
 
-      expect(updateMock).toHaveBeenCalledTimes(5);
+      expect(markMock).toHaveBeenCalledTimes(5);
       // If executed in parallel, total time should be ~10ms
       // If sequential, it would be ~50ms (5 * 10ms)
       expect(duration).toBeLessThan(40);
@@ -694,35 +622,31 @@ describe('auto-mode-service.ts', () => {
         isAutoMode: false,
       });
 
-      const loadMock = vi.fn().mockResolvedValue({ status: 'in_progress' });
-      const updateMock = vi
+      const markMock = vi
         .fn()
         .mockResolvedValueOnce(undefined)
         .mockRejectedValueOnce(new Error('Failed to update'));
-      mockLoadFeature(service, loadMock);
-      mockUpdateFeatureStatus(service, updateMock);
+      mockFeatureStateManagerMarkInterrupted(service, markMock);
 
       // Should not throw even though one feature failed
       await expect(service.markAllRunningFeaturesInterrupted()).resolves.not.toThrow();
 
-      expect(updateMock).toHaveBeenCalledTimes(2);
+      expect(markMock).toHaveBeenCalledTimes(2);
     });
 
-    it('should use provided reason in logging', async () => {
+    it('should use provided reason', async () => {
       addRunningFeatureForInterrupt(service, {
         featureId: 'feature-1',
         projectPath: '/project/path',
         isAutoMode: true,
       });
 
-      const loadMock = vi.fn().mockResolvedValue({ id: 'feature-1', status: 'in_progress' });
-      const updateMock = vi.fn().mockResolvedValue(undefined);
-      mockLoadFeature(service, loadMock);
-      mockUpdateFeatureStatus(service, updateMock);
+      const markMock = vi.fn().mockResolvedValue(undefined);
+      mockFeatureStateManagerMarkInterrupted(service, markMock);
 
       await service.markAllRunningFeaturesInterrupted('manual stop');
 
-      expect(updateMock).toHaveBeenCalledWith('/project/path', 'feature-1', 'interrupted');
+      expect(markMock).toHaveBeenCalledWith('/project/path', 'feature-1', 'manual stop');
     });
 
     it('should use default reason when none provided', async () => {
@@ -732,17 +656,15 @@ describe('auto-mode-service.ts', () => {
         isAutoMode: true,
       });
 
-      const loadMock = vi.fn().mockResolvedValue({ id: 'feature-1', status: 'in_progress' });
-      const updateMock = vi.fn().mockResolvedValue(undefined);
-      mockLoadFeature(service, loadMock);
-      mockUpdateFeatureStatus(service, updateMock);
+      const markMock = vi.fn().mockResolvedValue(undefined);
+      mockFeatureStateManagerMarkInterrupted(service, markMock);
 
       await service.markAllRunningFeaturesInterrupted();
 
-      expect(updateMock).toHaveBeenCalledWith('/project/path', 'feature-1', 'interrupted');
+      expect(markMock).toHaveBeenCalledWith('/project/path', 'feature-1', 'server shutdown');
     });
 
-    it('should preserve pipeline statuses for running features', async () => {
+    it('should call markFeatureInterrupted for all running features (pipeline status handling delegated to FeatureStateManager)', async () => {
       addRunningFeatureForInterrupt(service, {
         featureId: 'feature-1',
         projectPath: '/project-a',
@@ -759,27 +681,18 @@ describe('auto-mode-service.ts', () => {
         isAutoMode: true,
       });
 
-      // feature-1 has in_progress (should be interrupted)
-      // feature-2 has pipeline_testing (should be preserved)
-      // feature-3 has pipeline_implementation (should be preserved)
-      const loadMock = vi
-        .fn()
-        .mockImplementation(async (_projectPath: string, featureId: string) => {
-          if (featureId === 'feature-1') return { id: 'feature-1', status: 'in_progress' };
-          if (featureId === 'feature-2') return { id: 'feature-2', status: 'pipeline_testing' };
-          if (featureId === 'feature-3')
-            return { id: 'feature-3', status: 'pipeline_implementation' };
-          return null;
-        });
-      const updateMock = vi.fn().mockResolvedValue(undefined);
-      mockLoadFeature(service, loadMock);
-      mockUpdateFeatureStatus(service, updateMock);
+      // FeatureStateManager handles pipeline status preservation internally
+      const markMock = vi.fn().mockResolvedValue(undefined);
+      mockFeatureStateManagerMarkInterrupted(service, markMock);
 
       await service.markAllRunningFeaturesInterrupted();
 
-      // Only feature-1 should be marked as interrupted
-      expect(updateMock).toHaveBeenCalledTimes(1);
-      expect(updateMock).toHaveBeenCalledWith('/project-a', 'feature-1', 'interrupted');
+      // All running features should have markFeatureInterrupted called
+      // (FeatureStateManager internally preserves pipeline statuses)
+      expect(markMock).toHaveBeenCalledTimes(3);
+      expect(markMock).toHaveBeenCalledWith('/project-a', 'feature-1', 'server shutdown');
+      expect(markMock).toHaveBeenCalledWith('/project-b', 'feature-2', 'server shutdown');
+      expect(markMock).toHaveBeenCalledWith('/project-c', 'feature-3', 'server shutdown');
     });
   });
 

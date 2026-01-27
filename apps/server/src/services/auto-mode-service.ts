@@ -69,6 +69,8 @@ import {
   type GetCurrentBranchFn,
 } from './concurrency-manager.js';
 import { TypedEventBus } from './typed-event-bus.js';
+import { WorktreeResolver } from './worktree-resolver.js';
+import { FeatureStateManager } from './feature-state-manager.js';
 import type { SettingsService } from './settings-service.js';
 import { pipelineService, PipelineService } from './pipeline-service.js';
 import {
@@ -82,21 +84,6 @@ import {
 import { getNotificationService } from './notification-service.js';
 
 const execAsync = promisify(exec);
-
-/**
- * Get the current branch name for a git repository
- * @param projectPath - Path to the git repository
- * @returns The current branch name, or null if not in a git repo or on detached HEAD
- */
-async function getCurrentBranch(projectPath: string): Promise<string | null> {
-  try {
-    const { stdout } = await execAsync('git branch --show-current', { cwd: projectPath });
-    const branch = stdout.trim();
-    return branch || null;
-  } catch {
-    return null;
-  }
-}
 
 // ParsedTask and PlanSpec types are imported from @automaker/types
 
@@ -424,6 +411,8 @@ export class AutoModeService {
   private events: EventEmitter;
   private eventBus: TypedEventBus;
   private concurrencyManager: ConcurrencyManager;
+  private worktreeResolver: WorktreeResolver;
+  private featureStateManager: FeatureStateManager;
   private autoLoop: AutoLoopState | null = null;
   private featureLoader = new FeatureLoader();
   // Per-project autoloop state (supports multiple concurrent projects)
@@ -444,13 +433,20 @@ export class AutoModeService {
     events: EventEmitter,
     settingsService?: SettingsService,
     concurrencyManager?: ConcurrencyManager,
-    eventBus?: TypedEventBus
+    eventBus?: TypedEventBus,
+    worktreeResolver?: WorktreeResolver,
+    featureStateManager?: FeatureStateManager
   ) {
     this.events = events;
     this.eventBus = eventBus ?? new TypedEventBus(events);
     this.settingsService = settingsService ?? null;
-    // Pass the getCurrentBranch function to ConcurrencyManager for worktree counting
-    this.concurrencyManager = concurrencyManager ?? new ConcurrencyManager(getCurrentBranch);
+    this.worktreeResolver = worktreeResolver ?? new WorktreeResolver();
+    this.featureStateManager =
+      featureStateManager ?? new FeatureStateManager(events, this.featureLoader);
+    // Pass the WorktreeResolver's getCurrentBranch to ConcurrencyManager for worktree counting
+    this.concurrencyManager =
+      concurrencyManager ??
+      new ConcurrencyManager((projectPath) => this.worktreeResolver.getCurrentBranch(projectPath));
   }
 
   /**
@@ -492,75 +488,7 @@ export class AutoModeService {
    * @param projectPath - The project path to reset features for
    */
   async resetStuckFeatures(projectPath: string): Promise<void> {
-    const featuresDir = getFeaturesDir(projectPath);
-
-    try {
-      const entries = await secureFs.readdir(featuresDir, { withFileTypes: true });
-
-      for (const entry of entries) {
-        if (!entry.isDirectory()) continue;
-
-        const featurePath = path.join(featuresDir, entry.name, 'feature.json');
-        const result = await readJsonWithRecovery<Feature | null>(featurePath, null, {
-          maxBackups: DEFAULT_BACKUP_COUNT,
-          autoRestore: true,
-        });
-
-        const feature = result.data;
-        if (!feature) continue;
-
-        let needsUpdate = false;
-
-        // Reset in_progress features back to ready/backlog
-        if (feature.status === 'in_progress') {
-          const hasApprovedPlan = feature.planSpec?.status === 'approved';
-          feature.status = hasApprovedPlan ? 'ready' : 'backlog';
-          needsUpdate = true;
-          logger.info(
-            `[resetStuckFeatures] Reset feature ${feature.id} from in_progress to ${feature.status}`
-          );
-        }
-
-        // Reset generating planSpec status back to pending (spec generation was interrupted)
-        if (feature.planSpec?.status === 'generating') {
-          feature.planSpec.status = 'pending';
-          needsUpdate = true;
-          logger.info(
-            `[resetStuckFeatures] Reset feature ${feature.id} planSpec status from generating to pending`
-          );
-        }
-
-        // Reset any in_progress tasks back to pending (task execution was interrupted)
-        if (feature.planSpec?.tasks) {
-          for (const task of feature.planSpec.tasks) {
-            if (task.status === 'in_progress') {
-              task.status = 'pending';
-              needsUpdate = true;
-              logger.info(
-                `[resetStuckFeatures] Reset task ${task.id} for feature ${feature.id} from in_progress to pending`
-              );
-              // Clear currentTaskId if it points to this reverted task
-              if (feature.planSpec?.currentTaskId === task.id) {
-                feature.planSpec.currentTaskId = undefined;
-                logger.info(
-                  `[resetStuckFeatures] Cleared planSpec.currentTaskId for feature ${feature.id} (was pointing to reverted task ${task.id})`
-                );
-              }
-            }
-          }
-        }
-
-        if (needsUpdate) {
-          feature.updatedAt = new Date().toISOString();
-          await atomicWriteJson(featurePath, feature, { backupCount: DEFAULT_BACKUP_COUNT });
-        }
-      }
-    } catch (error) {
-      // If features directory doesn't exist, that's fine
-      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
-        logger.error(`[resetStuckFeatures] Error resetting features for ${projectPath}:`, error);
-      }
-    }
+    await this.featureStateManager.resetStuckFeatures(projectPath);
   }
 
   /**
@@ -1369,7 +1297,7 @@ export class AutoModeService {
       if (useWorktrees && branchName) {
         // Try to find existing worktree for this branch
         // Worktree should already exist (created when feature was added/edited)
-        worktreePath = await this.findExistingWorktreeForBranch(projectPath, branchName);
+        worktreePath = await this.worktreeResolver.findWorktreeForBranch(projectPath, branchName);
 
         if (worktreePath) {
           logger.info(`Using worktree for branch "${branchName}": ${worktreePath}`);
@@ -2133,7 +2061,7 @@ Complete the pipeline step instructions above. Review the previous work and appl
       const branchName = feature.branchName;
 
       if (useWorktrees && branchName) {
-        worktreePath = await this.findExistingWorktreeForBranch(projectPath, branchName);
+        worktreePath = await this.worktreeResolver.findWorktreeForBranch(projectPath, branchName);
         if (worktreePath) {
           logger.info(`Using worktree for branch "${branchName}": ${worktreePath}`);
         } else {
@@ -2259,7 +2187,7 @@ Complete the pipeline step instructions above. Review the previous work and appl
 
     if (useWorktrees && branchName) {
       // Try to find existing worktree for this branch
-      worktreePath = await this.findExistingWorktreeForBranch(projectPath, branchName);
+      worktreePath = await this.worktreeResolver.findWorktreeForBranch(projectPath, branchName);
 
       if (worktreePath) {
         workDir = worktreePath;
@@ -3098,71 +3026,10 @@ Format your response as a structured markdown document.`;
     return this.pendingApprovals.has(featureId);
   }
 
-  // Private helpers
-
-  /**
-   * Find an existing worktree for a given branch by checking git worktree list
-   */
-  private async findExistingWorktreeForBranch(
-    projectPath: string,
-    branchName: string
-  ): Promise<string | null> {
-    try {
-      const { stdout } = await execAsync('git worktree list --porcelain', {
-        cwd: projectPath,
-      });
-
-      const lines = stdout.split('\n');
-      let currentPath: string | null = null;
-      let currentBranch: string | null = null;
-
-      for (const line of lines) {
-        if (line.startsWith('worktree ')) {
-          currentPath = line.slice(9);
-        } else if (line.startsWith('branch ')) {
-          currentBranch = line.slice(7).replace('refs/heads/', '');
-        } else if (line === '' && currentPath && currentBranch) {
-          // End of a worktree entry
-          if (currentBranch === branchName) {
-            // Resolve to absolute path - git may return relative paths
-            // On Windows, this is critical for cwd to work correctly
-            // On all platforms, absolute paths ensure consistent behavior
-            const resolvedPath = path.isAbsolute(currentPath)
-              ? path.resolve(currentPath)
-              : path.resolve(projectPath, currentPath);
-            return resolvedPath;
-          }
-          currentPath = null;
-          currentBranch = null;
-        }
-      }
-
-      // Check the last entry (if file doesn't end with newline)
-      if (currentPath && currentBranch && currentBranch === branchName) {
-        // Resolve to absolute path for cross-platform compatibility
-        const resolvedPath = path.isAbsolute(currentPath)
-          ? path.resolve(currentPath)
-          : path.resolve(projectPath, currentPath);
-        return resolvedPath;
-      }
-
-      return null;
-    } catch {
-      return null;
-    }
-  }
+  // Private helpers - delegate to extracted services
 
   private async loadFeature(projectPath: string, featureId: string): Promise<Feature | null> {
-    // Features are stored in .automaker directory
-    const featureDir = getFeatureDir(projectPath, featureId);
-    const featurePath = path.join(featureDir, 'feature.json');
-
-    try {
-      const data = (await secureFs.readFile(featurePath, 'utf-8')) as string;
-      return JSON.parse(data);
-    } catch {
-      return null;
-    }
+    return this.featureStateManager.loadFeature(projectPath, featureId);
   }
 
   private async updateFeatureStatus(
@@ -3170,71 +3037,7 @@ Format your response as a structured markdown document.`;
     featureId: string,
     status: string
   ): Promise<void> {
-    // Features are stored in .automaker directory
-    const featureDir = getFeatureDir(projectPath, featureId);
-    const featurePath = path.join(featureDir, 'feature.json');
-
-    try {
-      // Use recovery-enabled read for corrupted file handling
-      const result = await readJsonWithRecovery<Feature | null>(featurePath, null, {
-        maxBackups: DEFAULT_BACKUP_COUNT,
-        autoRestore: true,
-      });
-
-      logRecoveryWarning(result, `Feature ${featureId}`, logger);
-
-      const feature = result.data;
-      if (!feature) {
-        logger.warn(`Feature ${featureId} not found or could not be recovered`);
-        return;
-      }
-
-      feature.status = status;
-      feature.updatedAt = new Date().toISOString();
-      // Set justFinishedAt timestamp when moving to waiting_approval (agent just completed)
-      // Badge will show for 2 minutes after this timestamp
-      if (status === 'waiting_approval') {
-        feature.justFinishedAt = new Date().toISOString();
-      } else {
-        // Clear the timestamp when moving to other statuses
-        feature.justFinishedAt = undefined;
-      }
-
-      // Use atomic write with backup support
-      await atomicWriteJson(featurePath, feature, { backupCount: DEFAULT_BACKUP_COUNT });
-
-      // Create notifications for important status changes
-      const notificationService = getNotificationService();
-      if (status === 'waiting_approval') {
-        await notificationService.createNotification({
-          type: 'feature_waiting_approval',
-          title: 'Feature Ready for Review',
-          message: `"${feature.name || featureId}" is ready for your review and approval.`,
-          featureId,
-          projectPath,
-        });
-      } else if (status === 'verified') {
-        await notificationService.createNotification({
-          type: 'feature_verified',
-          title: 'Feature Verified',
-          message: `"${feature.name || featureId}" has been verified and is complete.`,
-          featureId,
-          projectPath,
-        });
-      }
-
-      // Sync completed/verified features to app_spec.txt
-      if (status === 'verified' || status === 'completed') {
-        try {
-          await this.featureLoader.syncFeatureToAppSpec(projectPath, feature);
-        } catch (syncError) {
-          // Log but don't fail the status update if sync fails
-          logger.warn(`Failed to sync feature ${featureId} to app_spec.txt:`, syncError);
-        }
-      }
-    } catch (error) {
-      logger.error(`Failed to update feature status for ${featureId}:`, error);
-    }
+    await this.featureStateManager.updateFeatureStatus(projectPath, featureId, status);
   }
 
   /**
@@ -3258,25 +3061,7 @@ Format your response as a structured markdown document.`;
     featureId: string,
     reason?: string
   ): Promise<void> {
-    // Load the feature to check its current status
-    const feature = await this.loadFeature(projectPath, featureId);
-    const currentStatus = feature?.status;
-
-    // Preserve pipeline_* statuses so resumePipelineFeature can resume from the correct step
-    if (currentStatus && currentStatus.startsWith('pipeline_')) {
-      logger.info(
-        `Feature ${featureId} was in ${currentStatus}; preserving pipeline status for resume`
-      );
-      return;
-    }
-
-    if (reason) {
-      logger.info(`Marking feature ${featureId} as interrupted: ${reason}`);
-    } else {
-      logger.info(`Marking feature ${featureId} as interrupted`);
-    }
-
-    await this.updateFeatureStatus(projectPath, featureId, 'interrupted');
+    await this.featureStateManager.markFeatureInterrupted(projectPath, featureId, reason);
   }
 
   /**
@@ -3355,49 +3140,7 @@ Format your response as a structured markdown document.`;
     featureId: string,
     updates: Partial<PlanSpec>
   ): Promise<void> {
-    // Use getFeatureDir helper for consistent path resolution
-    const featureDir = getFeatureDir(projectPath, featureId);
-    const featurePath = path.join(featureDir, 'feature.json');
-
-    try {
-      // Use recovery-enabled read for corrupted file handling
-      const result = await readJsonWithRecovery<Feature | null>(featurePath, null, {
-        maxBackups: DEFAULT_BACKUP_COUNT,
-        autoRestore: true,
-      });
-
-      logRecoveryWarning(result, `Feature ${featureId}`, logger);
-
-      const feature = result.data;
-      if (!feature) {
-        logger.warn(`Feature ${featureId} not found or could not be recovered`);
-        return;
-      }
-
-      // Initialize planSpec if it doesn't exist
-      if (!feature.planSpec) {
-        feature.planSpec = {
-          status: 'pending',
-          version: 1,
-          reviewedByUser: false,
-        };
-      }
-
-      // Apply updates
-      Object.assign(feature.planSpec, updates);
-
-      // If content is being updated and it's a new version, increment version
-      if (updates.content && updates.content !== feature.planSpec.content) {
-        feature.planSpec.version = (feature.planSpec.version || 0) + 1;
-      }
-
-      feature.updatedAt = new Date().toISOString();
-
-      // Use atomic write with backup support
-      await atomicWriteJson(featurePath, feature, { backupCount: DEFAULT_BACKUP_COUNT });
-    } catch (error) {
-      logger.error(`Failed to update planSpec for ${featureId}:`, error);
-    }
+    await this.featureStateManager.updateFeaturePlanSpec(projectPath, featureId, updates);
   }
 
   /**
@@ -3417,36 +3160,7 @@ Format your response as a structured markdown document.`;
     featureId: string,
     summary: string
   ): Promise<void> {
-    const featureDir = getFeatureDir(projectPath, featureId);
-    const featurePath = path.join(featureDir, 'feature.json');
-
-    try {
-      const result = await readJsonWithRecovery<Feature | null>(featurePath, null, {
-        maxBackups: DEFAULT_BACKUP_COUNT,
-        autoRestore: true,
-      });
-
-      logRecoveryWarning(result, `Feature ${featureId}`, logger);
-
-      const feature = result.data;
-      if (!feature) {
-        logger.warn(`Feature ${featureId} not found or could not be recovered`);
-        return;
-      }
-
-      feature.summary = summary;
-      feature.updatedAt = new Date().toISOString();
-
-      await atomicWriteJson(featurePath, feature, { backupCount: DEFAULT_BACKUP_COUNT });
-
-      this.eventBus.emitAutoModeEvent('auto_mode_summary', {
-        featureId,
-        projectPath,
-        summary,
-      });
-    } catch (error) {
-      logger.error(`Failed to save summary for ${featureId}:`, error);
-    }
+    await this.featureStateManager.saveFeatureSummary(projectPath, featureId, summary);
   }
 
   /**
@@ -3458,46 +3172,7 @@ Format your response as a structured markdown document.`;
     taskId: string,
     status: ParsedTask['status']
   ): Promise<void> {
-    // Use getFeatureDir helper for consistent path resolution
-    const featureDir = getFeatureDir(projectPath, featureId);
-    const featurePath = path.join(featureDir, 'feature.json');
-
-    try {
-      // Use recovery-enabled read for corrupted file handling
-      const result = await readJsonWithRecovery<Feature | null>(featurePath, null, {
-        maxBackups: DEFAULT_BACKUP_COUNT,
-        autoRestore: true,
-      });
-
-      logRecoveryWarning(result, `Feature ${featureId}`, logger);
-
-      const feature = result.data;
-      if (!feature || !feature.planSpec?.tasks) {
-        logger.warn(`Feature ${featureId} not found or has no tasks`);
-        return;
-      }
-
-      // Find and update the task
-      const task = feature.planSpec.tasks.find((t) => t.id === taskId);
-      if (task) {
-        task.status = status;
-        feature.updatedAt = new Date().toISOString();
-
-        // Use atomic write with backup support
-        await atomicWriteJson(featurePath, feature, { backupCount: DEFAULT_BACKUP_COUNT });
-
-        // Emit event for UI update
-        this.eventBus.emitAutoModeEvent('auto_mode_task_status', {
-          featureId,
-          projectPath,
-          taskId,
-          status,
-          tasks: feature.planSpec.tasks,
-        });
-      }
-    } catch (error) {
-      logger.error(`Failed to update task ${taskId} status for ${featureId}:`, error);
-    }
+    await this.featureStateManager.updateTaskStatus(projectPath, featureId, taskId, status);
   }
 
   /**
@@ -3570,7 +3245,7 @@ Format your response as a structured markdown document.`;
 
     // Get the actual primary branch name for the project (e.g., "main", "master", "develop")
     // This is needed to correctly match features when branchName is null (main worktree)
-    const primaryBranch = await getCurrentBranch(projectPath);
+    const primaryBranch = await this.worktreeResolver.getCurrentBranch(projectPath);
 
     try {
       const entries = await secureFs.readdir(featuresDir, {
@@ -5665,7 +5340,7 @@ This mock response was generated because AUTOMAKER_MOCK_AGENT=true was set.
       const existingBranches = await this.getExistingBranches(projectPath);
 
       // Get current/primary branch (features with null branchName are implicitly on this)
-      const primaryBranch = await getCurrentBranch(projectPath);
+      const primaryBranch = await this.worktreeResolver.getCurrentBranch(projectPath);
 
       // Check each feature with a branchName
       for (const feature of featuresWithBranches) {
