@@ -1,9 +1,5 @@
 /**
  * PipelineOrchestrator - Pipeline step execution and coordination
- *
- * Coordinates existing services (AgentExecutor, TestRunnerService, merge endpoint)
- * for pipeline step execution, test runner integration (5-attempt fix loop),
- * and automatic merging on completion.
  */
 
 import path from 'path';
@@ -34,7 +30,6 @@ import type { TestRunnerService, TestRunStatus } from './test-runner-service.js'
 
 const logger = createLogger('PipelineOrchestrator');
 
-/** Context object shared across pipeline execution */
 export interface PipelineContext {
   projectPath: string;
   featureId: string;
@@ -49,7 +44,6 @@ export interface PipelineContext {
   maxTestAttempts: number;
 }
 
-/** Information about pipeline status for resume operations */
 export interface PipelineStatusInfo {
   isPipeline: boolean;
   stepId: string | null;
@@ -59,7 +53,6 @@ export interface PipelineStatusInfo {
   config: PipelineConfig | null;
 }
 
-/** Result types */
 export interface StepResult {
   success: boolean;
   testsPassed?: boolean;
@@ -72,7 +65,6 @@ export interface MergeResult {
   error?: string;
 }
 
-/** Callback types for AutoModeService integration */
 export type UpdateFeatureStatusFn = (
   projectPath: string,
   featureId: string,
@@ -101,9 +93,6 @@ export type RunAgentFn = (
   options?: Record<string, unknown>
 ) => Promise<void>;
 
-/**
- * PipelineOrchestrator - Coordinates pipeline step execution
- */
 export class PipelineOrchestrator {
   private serverPort: number;
 
@@ -125,12 +114,9 @@ export class PipelineOrchestrator {
     this.serverPort = serverPort;
   }
 
-  /** Execute pipeline steps sequentially */
   async executePipeline(context: PipelineContext): Promise<void> {
     const { projectPath, featureId, feature, steps, workDir, abortController, autoLoadClaudeMd } =
       context;
-    logger.info(`Executing ${steps.length} pipeline step(s) for feature ${featureId}`);
-
     const prompts = await getPromptCustomization(this.settingsService, '[AutoMode]');
     const contextResult = await this.loadContextFilesFn({
       projectPath,
@@ -138,20 +124,17 @@ export class PipelineOrchestrator {
       taskContext: { title: feature.title ?? '', description: feature.description ?? '' },
     });
     const contextFilesPrompt = filterClaudeMdFromContext(contextResult, autoLoadClaudeMd);
-
-    const featureDir = getFeatureDir(projectPath, featureId);
-    const contextPath = path.join(featureDir, 'agent-output.md');
+    const contextPath = path.join(getFeatureDir(projectPath, featureId), 'agent-output.md');
     let previousContext = '';
     try {
       previousContext = (await secureFs.readFile(contextPath, 'utf-8')) as string;
     } catch {
-      /* No context */
+      /* */
     }
 
     for (let i = 0; i < steps.length; i++) {
       const step = steps[i];
       if (abortController.signal.aborted) throw new Error('Pipeline execution aborted');
-
       await this.updateFeatureStatusFn(projectPath, featureId, `pipeline_${step.id}`);
       this.eventBus.emitAutoModeEvent('auto_mode_progress', {
         featureId,
@@ -167,19 +150,11 @@ export class PipelineOrchestrator {
         totalSteps: steps.length,
         projectPath,
       });
-
-      const prompt = this.buildPipelineStepPrompt(
-        step,
-        feature,
-        previousContext,
-        prompts.taskExecution
-      );
       const model = resolveModelString(feature.model, DEFAULT_MODELS.claude);
-
       await this.runAgentFn(
         workDir,
         featureId,
-        prompt,
+        this.buildPipelineStepPrompt(step, feature, previousContext, prompts.taskExecution),
         abortController,
         projectPath,
         undefined,
@@ -194,11 +169,10 @@ export class PipelineOrchestrator {
           thinkingLevel: feature.thinkingLevel,
         }
       );
-
       try {
         previousContext = (await secureFs.readFile(contextPath, 'utf-8')) as string;
       } catch {
-        /* No update */
+        /* */
       }
       this.eventBus.emitAutoModeEvent('pipeline_step_complete', {
         featureId,
@@ -208,22 +182,13 @@ export class PipelineOrchestrator {
         totalSteps: steps.length,
         projectPath,
       });
-      logger.info(
-        `Pipeline step ${i + 1}/${steps.length} (${step.name}) completed for feature ${featureId}`
-      );
     }
-
-    logger.info(`All pipeline steps completed for feature ${featureId}`);
     if (context.branchName) {
       const mergeResult = await this.attemptMerge(context);
-      if (!mergeResult.success && mergeResult.hasConflicts) {
-        logger.info(`Feature ${featureId} has merge conflicts`);
-        return;
-      }
+      if (!mergeResult.success && mergeResult.hasConflicts) return;
     }
   }
 
-  /** Build the prompt for a pipeline step */
   buildPipelineStepPrompt(
     step: PipelineStep,
     feature: Feature,
@@ -232,11 +197,12 @@ export class PipelineOrchestrator {
   ): string {
     let prompt = `## Pipeline Step: ${step.name}\n\nThis is an automated pipeline step.\n\n### Feature Context\n${this.buildFeaturePromptFn(feature, taskPrompts)}\n\n`;
     if (previousContext) prompt += `### Previous Work\n${previousContext}\n\n`;
-    prompt += `### Pipeline Step Instructions\n${step.instructions}\n\n### Task\nComplete the pipeline step instructions above.`;
-    return prompt;
+    return (
+      prompt +
+      `### Pipeline Step Instructions\n${step.instructions}\n\n### Task\nComplete the pipeline step instructions above.`
+    );
   }
 
-  /** Detect if a feature is stuck in a pipeline step */
   async detectPipelineStatus(
     projectPath: string,
     featureId: string,
@@ -252,10 +218,8 @@ export class PipelineOrchestrator {
         step: null,
         config: null,
       };
-
     const stepId = pipelineService.getStepIdFromStatus(currentStatus);
-    if (!stepId) {
-      logger.warn(`Feature ${featureId} has invalid pipeline status: ${currentStatus}`);
+    if (!stepId)
       return {
         isPipeline: true,
         stepId: null,
@@ -264,28 +228,21 @@ export class PipelineOrchestrator {
         step: null,
         config: null,
       };
-    }
-
     const config = await pipelineService.getPipelineConfig(projectPath);
-    if (!config || config.steps.length === 0) {
-      logger.warn(`Feature ${featureId} has pipeline status but no config exists`);
+    if (!config || config.steps.length === 0)
       return { isPipeline: true, stepId, stepIndex: -1, totalSteps: 0, step: null, config: null };
-    }
-
     const sortedSteps = [...config.steps].sort((a, b) => a.order - b.order);
     const stepIndex = sortedSteps.findIndex((s) => s.id === stepId);
-    const step = stepIndex === -1 ? null : sortedSteps[stepIndex];
-
-    if (!step) logger.warn(`Feature ${featureId} stuck in step ${stepId} which no longer exists`);
-    else
-      logger.info(
-        `Detected pipeline status: step ${stepIndex + 1}/${sortedSteps.length} (${step.name})`
-      );
-
-    return { isPipeline: true, stepId, stepIndex, totalSteps: sortedSteps.length, step, config };
+    return {
+      isPipeline: true,
+      stepId,
+      stepIndex,
+      totalSteps: sortedSteps.length,
+      step: stepIndex === -1 ? null : sortedSteps[stepIndex],
+      config,
+    };
   }
 
-  /** Resume pipeline execution from detected status */
   async resumePipeline(
     projectPath: string,
     feature: Feature,
@@ -293,10 +250,7 @@ export class PipelineOrchestrator {
     pipelineInfo: PipelineStatusInfo
   ): Promise<void> {
     const featureId = feature.id;
-    logger.info(`Resuming feature ${featureId} from pipeline step ${pipelineInfo.stepId}`);
-
-    const featureDir = getFeatureDir(projectPath, featureId);
-    const contextPath = path.join(featureDir, 'agent-output.md');
+    const contextPath = path.join(getFeatureDir(projectPath, featureId), 'agent-output.md');
     let hasContext = false;
     try {
       await secureFs.access(contextPath);
