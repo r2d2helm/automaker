@@ -495,11 +495,23 @@ export class PipelineOrchestrator {
         }),
       });
 
-      const data = (await response.json()) as {
-        success: boolean;
-        hasConflicts?: boolean;
-        error?: string;
-      };
+      if (!response) {
+        return { success: false, error: 'No response from merge endpoint' };
+      }
+
+      // Defensively parse JSON response
+      let data: { success: boolean; hasConflicts?: boolean; error?: string };
+      try {
+        data = (await response.json()) as {
+          success: boolean;
+          hasConflicts?: boolean;
+          error?: string;
+        };
+      } catch (parseError) {
+        logger.error(`Failed to parse merge response:`, parseError);
+        return { success: false, error: 'Invalid response from merge endpoint' };
+      }
+
       if (!response.ok) {
         if (data.hasConflicts) {
           await this.updateFeatureStatusFn(projectPath, featureId, 'merge_conflict');

@@ -183,7 +183,13 @@ export class AutoLoopCoordinator {
             nextFeature.id,
             projectState.config.useWorktrees,
             true
-          ).catch(() => {});
+          ).catch((error) => {
+            const errorInfo = classifyError(error);
+            logger.error(`Auto-loop feature ${nextFeature.id} failed:`, errorInfo.message);
+            if (this.trackFailureAndCheckPauseForProject(projectPath, branchName, errorInfo)) {
+              this.signalShouldPauseForProject(projectPath, branchName, errorInfo);
+            }
+          });
         }
         await this.sleep(2000, projectState.abortController.signal);
       } catch {
@@ -268,27 +274,64 @@ export class AutoLoopCoordinator {
 
   trackFailureAndCheckPauseForProject(
     projectPath: string,
-    errorInfo: { type: string; message: string }
+    branchNameOrError: string | null | { type: string; message: string },
+    errorInfo?: { type: string; message: string }
   ): boolean {
-    const projectState = this.autoLoopsByProject.get(getWorktreeAutoLoopKey(projectPath, null));
+    // Support both old (projectPath, errorInfo) and new (projectPath, branchName, errorInfo) signatures
+    let branchName: string | null;
+    let actualErrorInfo: { type: string; message: string };
+    if (
+      typeof branchNameOrError === 'object' &&
+      branchNameOrError !== null &&
+      'type' in branchNameOrError
+    ) {
+      // Old signature: (projectPath, errorInfo)
+      branchName = null;
+      actualErrorInfo = branchNameOrError;
+    } else {
+      // New signature: (projectPath, branchName, errorInfo)
+      branchName = branchNameOrError;
+      actualErrorInfo = errorInfo!;
+    }
+    const projectState = this.autoLoopsByProject.get(
+      getWorktreeAutoLoopKey(projectPath, branchName)
+    );
     if (!projectState) return false;
     const now = Date.now();
-    projectState.consecutiveFailures.push({ timestamp: now, error: errorInfo.message });
+    projectState.consecutiveFailures.push({ timestamp: now, error: actualErrorInfo.message });
     projectState.consecutiveFailures = projectState.consecutiveFailures.filter(
       (f) => now - f.timestamp < FAILURE_WINDOW_MS
     );
     return (
       projectState.consecutiveFailures.length >= CONSECUTIVE_FAILURE_THRESHOLD ||
-      errorInfo.type === 'quota_exhausted' ||
-      errorInfo.type === 'rate_limit'
+      actualErrorInfo.type === 'quota_exhausted' ||
+      actualErrorInfo.type === 'rate_limit'
     );
   }
 
   signalShouldPauseForProject(
     projectPath: string,
-    errorInfo: { type: string; message: string }
+    branchNameOrError: string | null | { type: string; message: string },
+    errorInfo?: { type: string; message: string }
   ): void {
-    const projectState = this.autoLoopsByProject.get(getWorktreeAutoLoopKey(projectPath, null));
+    // Support both old (projectPath, errorInfo) and new (projectPath, branchName, errorInfo) signatures
+    let branchName: string | null;
+    let actualErrorInfo: { type: string; message: string };
+    if (
+      typeof branchNameOrError === 'object' &&
+      branchNameOrError !== null &&
+      'type' in branchNameOrError
+    ) {
+      branchName = null;
+      actualErrorInfo = branchNameOrError;
+    } else {
+      branchName = branchNameOrError;
+      actualErrorInfo = errorInfo!;
+    }
+
+    const projectState = this.autoLoopsByProject.get(
+      getWorktreeAutoLoopKey(projectPath, branchName)
+    );
     if (!projectState || projectState.pausedDueToFailures) return;
     projectState.pausedDueToFailures = true;
     const failureCount = projectState.consecutiveFailures.length;
@@ -297,24 +340,29 @@ export class AutoLoopCoordinator {
         failureCount >= CONSECUTIVE_FAILURE_THRESHOLD
           ? `Auto Mode paused: ${failureCount} consecutive failures detected.`
           : 'Auto Mode paused: Usage limit or API error detected.',
-      errorType: errorInfo.type,
-      originalError: errorInfo.message,
+      errorType: actualErrorInfo.type,
+      originalError: actualErrorInfo.message,
       failureCount,
       projectPath,
+      branchName,
     });
-    this.stopAutoLoopForProject(projectPath);
+    this.stopAutoLoopForProject(projectPath, branchName);
   }
 
-  resetFailureTrackingForProject(projectPath: string): void {
-    const projectState = this.autoLoopsByProject.get(getWorktreeAutoLoopKey(projectPath, null));
+  resetFailureTrackingForProject(projectPath: string, branchName: string | null = null): void {
+    const projectState = this.autoLoopsByProject.get(
+      getWorktreeAutoLoopKey(projectPath, branchName)
+    );
     if (projectState) {
       projectState.consecutiveFailures = [];
       projectState.pausedDueToFailures = false;
     }
   }
 
-  recordSuccessForProject(projectPath: string): void {
-    const projectState = this.autoLoopsByProject.get(getWorktreeAutoLoopKey(projectPath, null));
+  recordSuccessForProject(projectPath: string, branchName: string | null = null): void {
+    const projectState = this.autoLoopsByProject.get(
+      getWorktreeAutoLoopKey(projectPath, branchName)
+    );
     if (projectState) projectState.consecutiveFailures = [];
   }
 

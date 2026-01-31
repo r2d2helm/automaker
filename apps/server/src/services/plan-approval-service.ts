@@ -66,12 +66,18 @@ export class PlanApprovalService {
     this.settingsService = settingsService;
   }
 
+  /** Generate project-scoped key to prevent collisions across projects */
+  private approvalKey(projectPath: string, featureId: string): string {
+    return `${projectPath}::${featureId}`;
+  }
+
   /** Wait for plan approval with timeout (default 30 min). Rejects on timeout/cancellation. */
   async waitForApproval(featureId: string, projectPath: string): Promise<PlanApprovalResult> {
     const timeoutMs = await this.getTimeoutMs(projectPath);
     const timeoutMinutes = Math.round(timeoutMs / 60000);
+    const key = this.approvalKey(projectPath, featureId);
 
-    logger.info(`Registering pending approval for feature ${featureId}`);
+    logger.info(`Registering pending approval for feature ${featureId} in project ${projectPath}`);
     logger.info(
       `Current pending approvals: ${Array.from(this.pendingApprovals.keys()).join(', ') || 'none'}`
     );
@@ -80,12 +86,12 @@ export class PlanApprovalService {
       // Set up timeout to prevent indefinite waiting and memory leaks
       // timeoutId stored in closure, NOT in PendingApproval object
       const timeoutId = setTimeout(() => {
-        const pending = this.pendingApprovals.get(featureId);
+        const pending = this.pendingApprovals.get(key);
         if (pending) {
           logger.warn(
             `Plan approval for feature ${featureId} timed out after ${timeoutMinutes} minutes`
           );
-          this.pendingApprovals.delete(featureId);
+          this.pendingApprovals.delete(key);
           reject(
             new Error(
               `Plan approval timed out after ${timeoutMinutes} minutes - feature execution cancelled`
@@ -106,7 +112,7 @@ export class PlanApprovalService {
         reject(error);
       };
 
-      this.pendingApprovals.set(featureId, {
+      this.pendingApprovals.set(key, {
         resolve: wrappedResolve,
         reject: wrappedReject,
         featureId,
@@ -132,7 +138,23 @@ export class PlanApprovalService {
       `Current pending approvals: ${Array.from(this.pendingApprovals.keys()).join(', ') || 'none'}`
     );
 
-    const pending = this.pendingApprovals.get(featureId);
+    // Try to find pending approval using project-scoped key if projectPath is available
+    let foundKey: string | undefined;
+    let pending: PendingApproval | undefined;
+
+    if (projectPathFromClient) {
+      foundKey = this.approvalKey(projectPathFromClient, featureId);
+      pending = this.pendingApprovals.get(foundKey);
+    } else {
+      // Fallback: search by featureId (backward compatibility)
+      for (const [key, approval] of this.pendingApprovals) {
+        if (approval.featureId === featureId) {
+          foundKey = key;
+          pending = approval;
+          break;
+        }
+      }
+    }
 
     if (!pending) {
       logger.info(`No pending approval in Map for feature ${featureId}`);
@@ -219,32 +241,60 @@ export class PlanApprovalService {
     // Resolve the promise with all data including feedback
     // This triggers the wrapped resolve which clears the timeout
     pending.resolve({ approved, editedPlan, feedback });
-    this.pendingApprovals.delete(featureId);
+    if (foundKey) {
+      this.pendingApprovals.delete(foundKey);
+    }
 
     return { success: true };
   }
 
   /** Cancel approval (e.g., when feature stopped). Timeout cleared via wrapped reject. */
-  cancelApproval(featureId: string): void {
+  cancelApproval(featureId: string, projectPath?: string): void {
     logger.info(`cancelApproval called for feature ${featureId}`);
     logger.info(
       `Current pending approvals: ${Array.from(this.pendingApprovals.keys()).join(', ') || 'none'}`
     );
 
-    const pending = this.pendingApprovals.get(featureId);
-    if (pending) {
+    // If projectPath provided, use project-scoped key; otherwise search by featureId
+    let foundKey: string | undefined;
+    let pending: PendingApproval | undefined;
+
+    if (projectPath) {
+      foundKey = this.approvalKey(projectPath, featureId);
+      pending = this.pendingApprovals.get(foundKey);
+    } else {
+      // Fallback: search for any approval with this featureId (backward compatibility)
+      for (const [key, approval] of this.pendingApprovals) {
+        if (approval.featureId === featureId) {
+          foundKey = key;
+          pending = approval;
+          break;
+        }
+      }
+    }
+
+    if (pending && foundKey) {
       logger.info(`Found and cancelling pending approval for feature ${featureId}`);
       // Wrapped reject clears timeout automatically
       pending.reject(new Error('Plan approval cancelled - feature was stopped'));
-      this.pendingApprovals.delete(featureId);
+      this.pendingApprovals.delete(foundKey);
     } else {
       logger.info(`No pending approval to cancel for feature ${featureId}`);
     }
   }
 
   /** Check if a feature has a pending plan approval. */
-  hasPendingApproval(featureId: string): boolean {
-    return this.pendingApprovals.has(featureId);
+  hasPendingApproval(featureId: string, projectPath?: string): boolean {
+    if (projectPath) {
+      return this.pendingApprovals.has(this.approvalKey(projectPath, featureId));
+    }
+    // Fallback: search by featureId (backward compatibility)
+    for (const approval of this.pendingApprovals.values()) {
+      if (approval.featureId === featureId) {
+        return true;
+      }
+    }
+    return false;
   }
 
   /** Get timeout from project settings or default (30 min). */

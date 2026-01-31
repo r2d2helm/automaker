@@ -71,20 +71,21 @@ describe('FeatureStateManager', () => {
 
   describe('loadFeature', () => {
     it('should load feature from disk', async () => {
-      (secureFs.readFile as Mock).mockResolvedValue(JSON.stringify(mockFeature));
+      (readJsonWithRecovery as Mock).mockResolvedValue({ data: mockFeature, recovered: false });
 
       const feature = await manager.loadFeature('/project', 'feature-123');
 
       expect(feature).toEqual(mockFeature);
       expect(getFeatureDir).toHaveBeenCalledWith('/project', 'feature-123');
-      expect(secureFs.readFile).toHaveBeenCalledWith(
+      expect(readJsonWithRecovery).toHaveBeenCalledWith(
         '/project/.automaker/features/feature-123/feature.json',
-        'utf-8'
+        null,
+        expect.objectContaining({ autoRestore: true })
       );
     });
 
     it('should return null if feature does not exist', async () => {
-      (secureFs.readFile as Mock).mockRejectedValue(new Error('ENOENT'));
+      (readJsonWithRecovery as Mock).mockRejectedValue(new Error('ENOENT'));
 
       const feature = await manager.loadFeature('/project', 'non-existent');
 
@@ -92,7 +93,8 @@ describe('FeatureStateManager', () => {
     });
 
     it('should return null if feature JSON is invalid', async () => {
-      (secureFs.readFile as Mock).mockResolvedValue('not valid json');
+      // readJsonWithRecovery returns null as the default value when JSON is invalid
+      (readJsonWithRecovery as Mock).mockResolvedValue({ data: null, recovered: false });
 
       const feature = await manager.loadFeature('/project', 'feature-123');
 

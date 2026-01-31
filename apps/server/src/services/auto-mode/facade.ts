@@ -210,39 +210,39 @@ export class AutoModeServiceFacade {
       }
     );
 
-    // AutoLoopCoordinator - use shared if provided, otherwise create new
-    // Note: When using shared autoLoopCoordinator, callbacks are already set up by the global service
-    const autoLoopCoordinator =
-      sharedServices?.autoLoopCoordinator ??
-      new AutoLoopCoordinator(
-        eventBus,
-        concurrencyManager,
-        settingsService,
-        // Callbacks
-        (pPath, featureId, useWorktrees, isAutoMode) =>
-          facadeInstance!.executeFeature(featureId, useWorktrees, isAutoMode),
-        (pPath, branchName) =>
-          featureLoader
-            .getAll(pPath)
-            .then((features) =>
-              features.filter(
-                (f) =>
-                  (f.status === 'backlog' || f.status === 'ready') &&
-                  (branchName === null
-                    ? !f.branchName || f.branchName === 'main'
-                    : f.branchName === branchName)
-              )
-            ),
-        (pPath, branchName, maxConcurrency) =>
-          facadeInstance!.saveExecutionStateForProject(branchName, maxConcurrency),
-        (pPath, branchName) => facadeInstance!.clearExecutionState(branchName),
-        (pPath) => featureStateManager.resetStuckFeatures(pPath),
-        (feature) =>
-          feature.status === 'completed' ||
-          feature.status === 'verified' ||
-          feature.status === 'waiting_approval',
-        (featureId) => concurrencyManager.isRunning(featureId)
-      );
+    // AutoLoopCoordinator - ALWAYS create new with proper execution callbacks
+    // NOTE: We don't use sharedServices.autoLoopCoordinator because it doesn't have
+    // execution callbacks. Each facade needs its own coordinator to execute features.
+    // The shared coordinator in GlobalAutoModeService is for monitoring only.
+    const autoLoopCoordinator = new AutoLoopCoordinator(
+      eventBus,
+      concurrencyManager,
+      settingsService,
+      // Callbacks
+      (pPath, featureId, useWorktrees, isAutoMode) =>
+        facadeInstance!.executeFeature(featureId, useWorktrees, isAutoMode),
+      (pPath, branchName) =>
+        featureLoader
+          .getAll(pPath)
+          .then((features) =>
+            features.filter(
+              (f) =>
+                (f.status === 'backlog' || f.status === 'ready') &&
+                (branchName === null
+                  ? !f.branchName || f.branchName === 'main'
+                  : f.branchName === branchName)
+            )
+          ),
+      (pPath, branchName, maxConcurrency) =>
+        facadeInstance!.saveExecutionStateForProject(branchName, maxConcurrency),
+      (pPath, branchName) => facadeInstance!.clearExecutionState(branchName),
+      (pPath) => featureStateManager.resetStuckFeatures(pPath),
+      (feature) =>
+        feature.status === 'completed' ||
+        feature.status === 'verified' ||
+        feature.status === 'waiting_approval',
+      (featureId) => concurrencyManager.isRunning(featureId)
+    );
 
     // ExecutionService - runAgentFn calls AgentExecutor.execute
     const executionService = new ExecutionService(
@@ -328,8 +328,8 @@ export class AutoModeServiceFacade {
       (pPath, featureId, useWorktrees, _calledInternally) =>
         facadeInstance!.resumeFeature(featureId, useWorktrees, _calledInternally),
       (errorInfo) =>
-        autoLoopCoordinator.trackFailureAndCheckPauseForProject(projectPath, errorInfo),
-      (errorInfo) => autoLoopCoordinator.signalShouldPauseForProject(projectPath, errorInfo),
+        autoLoopCoordinator.trackFailureAndCheckPauseForProject(projectPath, null, errorInfo),
+      (errorInfo) => autoLoopCoordinator.signalShouldPauseForProject(projectPath, null, errorInfo),
       () => {
         /* recordSuccess - no-op */
       },
@@ -746,18 +746,14 @@ Address the follow-up instructions above. Review the previous work and make the 
    * Get all active auto loop projects (unique project paths)
    */
   getActiveAutoLoopProjects(): string[] {
-    // This needs access to internal state - for now return empty
-    // Routes should migrate to getActiveAutoLoopWorktrees
-    return [];
+    return this.autoLoopCoordinator.getActiveProjects();
   }
 
   /**
    * Get all active auto loop worktrees
    */
   getActiveAutoLoopWorktrees(): Array<{ projectPath: string; branchName: string | null }> {
-    // This needs access to internal state - for now return empty
-    // Will be properly implemented when routes migrate
-    return [];
+    return this.autoLoopCoordinator.getActiveWorktrees();
   }
 
   /**
@@ -891,7 +887,7 @@ Address the follow-up instructions above. Review the previous work and make the 
    * @param featureId - The feature ID
    */
   hasPendingApproval(featureId: string): boolean {
-    return this.planApprovalService.hasPendingApproval(featureId);
+    return this.planApprovalService.hasPendingApproval(featureId, this.projectPath);
   }
 
   /**
@@ -899,7 +895,7 @@ Address the follow-up instructions above. Review the previous work and make the 
    * @param featureId - The feature ID
    */
   cancelPlanApproval(featureId: string): void {
-    this.planApprovalService.cancelApproval(featureId);
+    this.planApprovalService.cancelApproval(featureId, this.projectPath);
   }
 
   // ===========================================================================

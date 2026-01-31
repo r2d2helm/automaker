@@ -180,9 +180,9 @@ export class AgentExecutor {
     }
 
     logger.info(`Starting stream for feature ${featureId}...`);
-    const stream = provider.executeQuery(executeOptions);
 
     try {
+      const stream = provider.executeQuery(executeOptions);
       streamLoop: for await (const msg of stream) {
         receivedAnyStreamMessage = true;
         appendRawEvent(msg);
@@ -502,10 +502,17 @@ export class AgentExecutor {
           planApproved = true;
           userFeedback = approvalResult.feedback;
           approvedPlanContent = approvalResult.editedPlan || currentPlanContent;
-          if (approvalResult.editedPlan)
+          if (approvalResult.editedPlan) {
+            // Re-parse tasks from edited plan to ensure we execute the updated tasks
+            const editedTasks = parseTasksFromSpec(approvalResult.editedPlan);
+            parsedTasks = editedTasks;
             await this.featureStateManager.updateFeaturePlanSpec(projectPath, featureId, {
               content: approvalResult.editedPlan,
+              tasks: editedTasks,
+              tasksTotal: editedTasks.length,
+              tasksCompleted: 0,
             });
+          }
           this.eventBus.emitAutoModeEvent('plan_approved', {
             featureId,
             projectPath,

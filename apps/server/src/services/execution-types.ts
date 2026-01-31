@@ -138,9 +138,9 @@ export type ExecuteFeatureFn = (
   projectPath: string,
   featureId: string,
   useWorktrees: boolean,
-  useScreenshots: boolean,
-  model?: string,
-  options?: { _calledInternally?: boolean }
+  isAutoMode: boolean,
+  providedWorktreePath?: string,
+  options?: { continuationPrompt?: string; _calledInternally?: boolean }
 ) => Promise<void>;
 
 /**

@@ -60,8 +60,12 @@ export class FeatureStateManager {
     const featurePath = path.join(featureDir, 'feature.json');
 
     try {
-      const data = (await secureFs.readFile(featurePath, 'utf-8')) as string;
-      return JSON.parse(data);
+      const result = await readJsonWithRecovery<Feature | null>(featurePath, null, {
+        maxBackups: DEFAULT_BACKUP_COUNT,
+        autoRestore: true,
+      });
+      logRecoveryWarning(result, `Feature ${featureId}`, logger);
+      return result.data;
     } catch {
       return null;
     }

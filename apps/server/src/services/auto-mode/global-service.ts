@@ -51,15 +51,19 @@ export class GlobalAutoModeService {
     this.featureStateManager = new FeatureStateManager(events, featureLoader);
 
     // Create AutoLoopCoordinator with callbacks
-    // These callbacks use placeholders since GlobalAutoModeService doesn't execute features
-    // Feature execution is done via facades
+    // IMPORTANT: This coordinator is for MONITORING ONLY (getActiveProjects, getActiveWorktrees).
+    // Facades MUST create their own AutoLoopCoordinator for actual execution.
+    // The executeFeatureFn here is a safety guard - it should never be called.
     this.autoLoopCoordinator = new AutoLoopCoordinator(
       this.eventBus,
       this.concurrencyManager,
       settingsService,
-      // executeFeatureFn - not used by global service, routes handle execution
+      // executeFeatureFn - throws because facades must use their own coordinator for execution
       async () => {
-        throw new Error('executeFeatureFn not available in GlobalAutoModeService');
+        throw new Error(
+          'executeFeatureFn not available in GlobalAutoModeService. ' +
+            'Facades must create their own AutoLoopCoordinator for execution.'
+        );
       },
       // getBacklogFeaturesFn
       (pPath, branchName) =>
