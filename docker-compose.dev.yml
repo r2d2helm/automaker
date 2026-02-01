@@ -40,6 +40,9 @@ services:
       # Optional - authentication
       - AUTOMAKER_API_KEY=${AUTOMAKER_API_KEY:-}
 
+      # Auto-login (skip auth prompt in dev)
+      - AUTOMAKER_AUTO_LOGIN=${AUTOMAKER_AUTO_LOGIN:-true}
+
       # Development settings
       - NODE_ENV=development
       - PORT=3008
@@ -47,7 +50,8 @@ services:
       - HUSKY=0
 
       # Optional - restrict to specific directory within container
-      - ALLOWED_ROOT_DIRECTORY=${ALLOWED_ROOT_DIRECTORY:-/projects}
+      # Disabled: causes 403 on fs/exists which triggers logout loop
+      # - ALLOWED_ROOT_DIRECTORY=${ALLOWED_ROOT_DIRECTORY:-/projects}
       - DATA_DIR=/data
 
       # Internal - indicates containerized environment
@@ -64,8 +68,11 @@ services:
       # This ensures data is consistent across Electron and web modes
       - ./data:/data
 
-      # Persist CLI configurations
-      - automaker-claude-config:/home/automaker/.claude
+      # Mount host projects directory for clone persistence
+      - ~/multipass-site:/home/r2d2helm/multipass-site
+
+      # Persist CLI configurations (mount host credentials)
+      - ~/.claude:/home/automaker/.claude
       - automaker-cursor-config:/home/automaker/.cursor
 
       # Note: Workspace mount (/projects) comes from docker-compose.override.yml
@@ -91,8 +98,8 @@ services:
       test: ['CMD', 'curl', '-f', 'http://localhost:3008/api/health']
       interval: 10s
       timeout: 5s
-      retries: 5
-      start_period: 60s
+      retries: 30
+      start_period: 300s
 
   # Development UI (frontend with HMR)
   ui:
@@ -141,9 +148,6 @@ volumes:
   automaker-dev-node-modules:
     name: automaker-dev-node-modules
     # Named volume for container-specific node_modules
-
-  automaker-claude-config:
-    name: automaker-claude-config
 
   automaker-cursor-config:
     name: automaker-cursor-config
